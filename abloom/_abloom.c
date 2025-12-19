@@ -1,5 +1,4 @@
 #define PY_SSIZE_T_CLEAN
-#include "../xxhash.h"
 #include <Python.h>
 #include <math.h>
 #include <string.h>
@@ -122,41 +121,10 @@ static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
   #undef CHECK_WORD
 }
 
-static inline uint64_t mix64(uint64_t x) {
-  x ^= x >> 33;
-  x *= 0xff51afd7ed558ccdULL;
-  x ^= x >> 33;
-  x *= 0xc4ceb9fe1a85ec53ULL;
-  x ^= x >> 33;
-  return x;
-}
-
 static int get_hash(PyObject *item, uint64_t *out_hash) {
-  if (PyBytes_Check(item)) {
-    *out_hash = XXH64(PyBytes_AS_STRING(item), PyBytes_GET_SIZE(item), 0);
-  } else if (PyLong_Check(item)) {
-    int overflow;
-    long long val = PyLong_AsLongLongAndOverflow(item, &overflow);
-    if (overflow == 0) {
-      if (val == -1 && PyErr_Occurred())
-        return -1;
-      *out_hash = mix64((uint64_t)val);
-    } else {
-      unsigned char buffer[128];
-      Py_ssize_t size = _PyLong_NumBits(item);
-      size_t byte_count = size <= 1028 ? (size + 7) / 8 : 128;
-      Py_ssize_t result = PyLong_AsNativeBytes(
-          item, buffer, byte_count,
-          Py_ASNATIVEBYTES_LITTLE_ENDIAN | Py_ASNATIVEBYTES_UNSIGNED_BUFFER);
-      if (result < 0)
-        return -1;
-      *out_hash = XXH64(buffer, byte_count, 0);
-    }
-  } else {
-    Py_hash_t py_hash = PyObject_Hash(item);
+  Py_hash_t py_hash = PyObject_Hash(item);
     if (py_hash == -1 && PyErr_Occurred()) return -1;
     *out_hash = (uint64_t)py_hash;
-  }
 
   return 0;
 }
