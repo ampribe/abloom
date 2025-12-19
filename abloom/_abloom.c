@@ -104,22 +104,22 @@ static inline void bloom_insert(BloomFilter *bf, uint64_t hash) {
 static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
   uint64_t block_idx = (hash >> 32) & bf->block_mask;
   uint32_t h_low = (uint32_t)hash;
-
   uint64_t *block = &bf->blocks[block_idx * BLOCK_WORDS];
-
-  uint32_t p0 = (h_low * SALT[0]) >> 26;
-  uint32_t p1 = (h_low * SALT[1]) >> 26;
-  uint32_t p2 = (h_low * SALT[2]) >> 26;
-  uint32_t p3 = (h_low * SALT[3]) >> 26;
-  uint32_t p4 = (h_low * SALT[4]) >> 26;
-  uint32_t p5 = (h_low * SALT[5]) >> 26;
-  uint32_t p6 = (h_low * SALT[6]) >> 26;
-  uint32_t p7 = (h_low * SALT[7]) >> 26;
-
-  return (block[0] & (1ULL << p0)) && (block[1] & (1ULL << p1)) &&
-         (block[2] & (1ULL << p2)) && (block[3] & (1ULL << p3)) &&
-         (block[4] & (1ULL << p4)) && (block[5] & (1ULL << p5)) &&
-         (block[6] & (1ULL << p6)) && (block[7] & (1ULL << p7));
+  
+  #define CHECK_WORD(i) \
+      if (!(block[i] & (1ULL << ((h_low * SALT[i]) >> 26)))) return 0
+  
+  CHECK_WORD(0);
+  CHECK_WORD(1);
+  CHECK_WORD(2);
+  CHECK_WORD(3);
+  CHECK_WORD(4);
+  CHECK_WORD(5);
+  CHECK_WORD(6);
+  CHECK_WORD(7);
+  
+  return 1;
+  #undef CHECK_WORD
 }
 
 static inline uint64_t mix64(uint64_t x) {
@@ -134,11 +134,6 @@ static inline uint64_t mix64(uint64_t x) {
 static int get_hash(PyObject *item, uint64_t *out_hash) {
   if (PyBytes_Check(item)) {
     *out_hash = XXH64(PyBytes_AS_STRING(item), PyBytes_GET_SIZE(item), 0);
-  } else if (PyUnicode_Check(item)) {
-    if (PyUnicode_READY(item) < 0)
-      return -1;
-    *out_hash = XXH64(PyUnicode_DATA(item),
-                      PyUnicode_GET_LENGTH(item) * PyUnicode_KIND(item), 0);
   } else if (PyLong_Check(item)) {
     int overflow;
     long long val = PyLong_AsLongLongAndOverflow(item, &overflow);
@@ -159,10 +154,8 @@ static int get_hash(PyObject *item, uint64_t *out_hash) {
     }
   } else {
     Py_hash_t py_hash = PyObject_Hash(item);
-    if (py_hash == -1 && PyErr_Occurred()) {
-      return -1;
-    }
-    *out_hash = mix64((uint64_t)py_hash);
+    if (py_hash == -1 && PyErr_Occurred()) return -1;
+    *out_hash = (uint64_t)py_hash;
   }
 
   return 0;
