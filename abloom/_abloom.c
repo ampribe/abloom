@@ -4,6 +4,9 @@
 #include <string.h>
 #include "../murmur3.h"
 
+const uint64_t BLOCK_BITS = 512;
+const uint64_t BLOCK_BYTES = 64;
+const uint64_t BLOCK_SHIFT = 9;
 
 typedef struct {
     PyObject_HEAD
@@ -13,6 +16,7 @@ typedef struct {
     uint64_t item_count;
     uint64_t capacity;
     double fp_rate;
+    uint64_t block_count;
 } BloomFilter;
 
 static uint64_t next_power_of_2(uint64_t n) {
@@ -35,6 +39,8 @@ static uint64_t calculate_optimal_bits(uint64_t capacity, double error_rate) {
     }
     // m = -(n * ln(p)) / (ln(2)^2)
     double m = -(double)capacity * log(error_rate) / (log(2.0) * log(2.0));
+    // add 20% to adjust for blocking
+    m *= 1.2;
     return next_power_of_2((uint64_t)ceil(m));
 }
 
@@ -43,6 +49,9 @@ static uint32_t calculate_optimal_hashes(uint64_t num_bits, uint64_t capacity) {
     // k = (m/n) * ln(2)
     double k = ((double)num_bits / (double)capacity) * log(2.0);
     uint32_t result = (uint32_t)round(k);
+    if (result > 3) {
+        result -= 1;
+    }
     return result > 0 ? result : 1;
 }
 
@@ -52,10 +61,11 @@ static void bloom_insert(BloomFilter *bf, const void *data, Py_ssize_t len) {
     
     uint64_t h1 = hash[0];
     uint64_t h2 = hash[1] | 1;  // Ensure odd for better distribution
-    
+    uint64_t block = (h1 >> 32) & (bf->block_count - 1);
+
     for (uint32_t i = 0; i < bf->k; i++) {
-        uint64_t index = (h1 + i * h2) & (bf->bit_count - 1);
-        bf->bitmap[index >> 3] |= (1 << (index & 7));
+        uint64_t index = (h1 + i * h2) & (BLOCK_BITS - 1);
+        bf->bitmap[block * BLOCK_BYTES + (index >> 3)] |= (1 << (index & 7));
     }
 }
 
@@ -65,10 +75,11 @@ static int bloom_check(BloomFilter *bf, const void *data, Py_ssize_t len) {
     
     uint64_t h1 = hash[0];
     uint64_t h2 = hash[1] | 1;
+    uint64_t block = (h1 >> 32) & (bf->block_count - 1);
     
     for (uint32_t i = 0; i < bf->k; i++) {
-        uint64_t index = (h1 + i * h2) & (bf->bit_count - 1);
-        if (!(bf->bitmap[index >> 3] & (1 << (index & 7)))) {
+        uint64_t index = (h1 + i * h2) & (BLOCK_BITS - 1);
+        if (!(bf->bitmap[block * BLOCK_BYTES + (index >> 3)] & (1 << (index & 7)))) {
             return 0;
         }
     }
@@ -180,6 +191,7 @@ static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
     self->fp_rate = fp_rate;
     self->bit_count = calculate_optimal_bits(capacity, fp_rate);
     self->k = calculate_optimal_hashes(self->bit_count, capacity);
+    self->block_count = self->bit_count >> BLOCK_SHIFT;
     self->item_count = 0;
 
     uint64_t num_bytes = self->bit_count / 8;
