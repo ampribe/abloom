@@ -4,19 +4,26 @@
 #include <string.h>
 #include "../murmur3.h"
 
-const uint64_t BLOCK_BITS = 512;
-const uint64_t BLOCK_BYTES = 64;
-const uint64_t BLOCK_SHIFT = 9;
+// SBBF constants: 256-bit blocks (8 x 32-bit words)
+#define BLOCK_BITS 256
+#define BLOCK_BYTES 32
+#define BLOCK_WORDS 8
+#define BITS_PER_WORD 32
+
+// Salt constants from Parquet spec
+static const uint32_t SALT[8] = {
+    0x47b6137bU, 0x44974d91U, 0x8824ad5bU, 0xa2b7289dU,
+    0x705495c7U, 0x2df1424bU, 0x9efc4947U, 0x5c6bfb31U
+};
 
 typedef struct {
     PyObject_HEAD
-    uint8_t *bitmap;
-    uint64_t bit_count;
-    uint32_t k;
+    uint32_t *blocks;
+    uint64_t block_count;
+    uint64_t block_mask;
     uint64_t item_count;
     uint64_t capacity;
     double fp_rate;
-    uint64_t block_count;
 } BloomFilter;
 
 static uint64_t next_power_of_2(uint64_t n) {
@@ -28,116 +35,97 @@ static uint64_t next_power_of_2(uint64_t n) {
     n |= n >> 8;
     n |= n >> 16;
     n |= n >> 32;
-    n++;
-    return n;
+    return n + 1;
 }
 
-static uint64_t calculate_optimal_bits(uint64_t capacity, double error_rate) {
+static uint64_t calculate_block_count(uint64_t capacity, double fp_rate) {
     if (capacity == 0) capacity = 1;
-    if (error_rate <= 0.0 || error_rate >= 1.0) {
-        error_rate = 0.01;
+    if (fp_rate <= 0.0 || fp_rate >= 1.0) {
+        fp_rate = 0.01;
     }
-    // m = -(n * ln(p)) / (ln(2)^2)
-    double m = -(double)capacity * log(error_rate) / (log(2.0) * log(2.0));
-    // add 20% to adjust for blocking
-    m *= 1.2;
-    return next_power_of_2((uint64_t)ceil(m));
-}
-
-static uint32_t calculate_optimal_hashes(uint64_t num_bits, uint64_t capacity) {
-    if (capacity == 0) capacity = 1;
-    // k = (m/n) * ln(2)
-    double k = ((double)num_bits / (double)capacity) * log(2.0);
-    uint32_t result = (uint32_t)round(k);
-    if (result > 3) {
-        result -= 1;
-    }
-    return result > 0 ? result : 1;
-}
-
-static void bloom_insert(BloomFilter *bf, const void *data, Py_ssize_t len) {
-    uint64_t hash[2];
-    MurmurHash3_x64_128(data, len, 0, hash);
     
-    uint64_t h1 = hash[0];
-    uint64_t h2 = hash[1] | 1;  // Ensure odd for better distribution
-    uint64_t block = (h1 >> 32) & (bf->block_count - 1);
+    // For SBBF with k=8, we need approximately:
+    // bits_per_item = -log2(fp_rate) * 1.44
+    // But SBBF has slightly worse FPR due to blocking, so add ~20-30%
+    double bits_per_item = -log2(fp_rate) * 1.44 * 1.25;
+    
+    // Minimum of 8 bits per item for k=8 to make sense
+    if (bits_per_item < 8.0) bits_per_item = 8.0;
+    
+    uint64_t total_bits = (uint64_t)ceil(capacity * bits_per_item);
+    uint64_t min_blocks = (total_bits + BLOCK_BITS - 1) / BLOCK_BITS;
+    
+    return next_power_of_2(min_blocks);
+}
 
-    for (uint32_t i = 0; i < bf->k; i++) {
-        uint64_t index = (h1 + i * h2) & (BLOCK_BITS - 1);
-        bf->bitmap[block * BLOCK_BYTES + (index >> 3)] |= (1 << (index & 7));
+static inline void bloom_insert(BloomFilter *bf, uint64_t hash) {
+    // Upper 32 bits select the block
+    uint64_t block_idx = (hash >> 32) & bf->block_mask;
+    uint32_t h_low = (uint32_t)hash;
+    
+    uint32_t *block = &bf->blocks[block_idx * BLOCK_WORDS];
+    
+    // Set one bit per word using salt multiplication
+    for (int i = 0; i < BLOCK_WORDS; i++) {
+        uint32_t bit_pos = (h_low * SALT[i]) >> 27;  // Top 5 bits = 0-31
+        block[i] |= (1U << bit_pos);
     }
 }
 
-static int bloom_check(BloomFilter *bf, const void *data, Py_ssize_t len) {
-    uint64_t hash[2];
-    MurmurHash3_x64_128(data, len, 0, hash);
+static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
+    uint64_t block_idx = (hash >> 32) & bf->block_mask;
+    uint32_t h_low = (uint32_t)hash;
     
-    uint64_t h1 = hash[0];
-    uint64_t h2 = hash[1] | 1;
-    uint64_t block = (h1 >> 32) & (bf->block_count - 1);
+    uint32_t *block = &bf->blocks[block_idx * BLOCK_WORDS];
     
-    for (uint32_t i = 0; i < bf->k; i++) {
-        uint64_t index = (h1 + i * h2) & (BLOCK_BITS - 1);
-        if (!(bf->bitmap[block * BLOCK_BYTES + (index >> 3)] & (1 << (index & 7)))) {
+    for (int i = 0; i < BLOCK_WORDS; i++) {
+        uint32_t bit_pos = (h_low * SALT[i]) >> 27;
+        if (!(block[i] & (1U << bit_pos))) {
             return 0;
         }
     }
     return 1;
 }
 
-static PyObject* BloomFilter_add(BloomFilter *self, PyObject *item) {
-    const void *data;
-    Py_ssize_t len;
-    long long val;
+static int get_hash(PyObject *item, uint64_t *out_hash) {
+    uint64_t hash[2];
+    
     if (PyBytes_Check(item)) {
-        data = PyBytes_AS_STRING(item);
-        len = PyBytes_GET_SIZE(item);
-    } else if (PyUnicode_Check(item)) {
-        if (PyUnicode_READY(item) < 0) return NULL;
-        data = PyUnicode_DATA(item);
-        len = PyUnicode_GET_LENGTH(item) * PyUnicode_KIND(item);
-    } else if (PyLong_Check(item)) {
-        val = PyLong_AsLongLong(item);
-        if (val == -1 && PyErr_Occurred()) return NULL;
-        data = &val;
-        len = sizeof (val);
-    } else {
-        PyErr_SetString(PyExc_TypeError, "Item must be bytes, str, or int");
-        return 0;
-    }
-
-    bloom_insert(self, data, len);
-    self->item_count++;
-
-    Py_RETURN_NONE;
-}
-
-static int BloomFilter_contains(BloomFilter *self, PyObject *item) {
-    const void *data;
-    Py_ssize_t len;
-    long long val;
-    if (PyBytes_Check(item)) {
-        data = PyBytes_AS_STRING(item);
-        len = PyBytes_GET_SIZE(item);
+        MurmurHash3_x64_128(PyBytes_AS_STRING(item), 
+                           PyBytes_GET_SIZE(item), 0, hash);
     } else if (PyUnicode_Check(item)) {
         if (PyUnicode_READY(item) < 0) return -1;
-        data = PyUnicode_DATA(item);
-        len = PyUnicode_GET_LENGTH(item) * PyUnicode_KIND(item);
+        MurmurHash3_x64_128(PyUnicode_DATA(item),
+                           PyUnicode_GET_LENGTH(item) * PyUnicode_KIND(item),
+                           0, hash);
     } else if (PyLong_Check(item)) {
-        val = PyLong_AsLongLong(item);
+        long long val = PyLong_AsLongLong(item);
         if (val == -1 && PyErr_Occurred()) return -1;
-        data = &val;
-        len = sizeof (val);
+        MurmurHash3_x64_128(&val, sizeof(val), 0, hash);
     } else {
         PyErr_SetString(PyExc_TypeError, "Item must be bytes, str, or int");
         return -1;
     }
+    
+    *out_hash = hash[0];  // Just use first 64 bits
+    return 0;
+}
 
-    int result;
-    result = bloom_check(self, data, len);
+static PyObject* BloomFilter_add(BloomFilter *self, PyObject *item) {
+    uint64_t hash;
+    if (get_hash(item, &hash) < 0) return NULL;
+    
+    bloom_insert(self, hash);
+    self->item_count++;
+    
+    Py_RETURN_NONE;
+}
 
-    return result;
+static int BloomFilter_contains(BloomFilter *self, PyObject *item) {
+    uint64_t hash;
+    if (get_hash(item, &hash) < 0) return -1;
+    
+    return bloom_check(self, hash);
 }
 
 static Py_ssize_t BloomFilter_len(BloomFilter *self) {
@@ -153,17 +141,22 @@ static PyObject* BloomFilter_get_fp_rate(BloomFilter *self, void *closure) {
 }
 
 static PyObject* BloomFilter_get_k(BloomFilter *self, void *closure) {
-    return PyLong_FromUnsignedLong(self->k);
+    return PyLong_FromLong(BLOCK_WORDS);  // Always 8 for SBBF
 }
 
 static PyObject* BloomFilter_get_byte_count(BloomFilter *self, void *closure) {
-    uint64_t bytes = self->bit_count / 8;
+    uint64_t bytes = self->block_count * BLOCK_BYTES;
     return PyLong_FromUnsignedLongLong(bytes);
 }
 
+static PyObject* BloomFilter_get_bit_count(BloomFilter *self, void *closure) {
+    uint64_t bits = self->block_count * BLOCK_BITS;
+    return PyLong_FromUnsignedLongLong(bits);
+}
+
 static void BloomFilter_dealloc(BloomFilter *self) {
-    if (self->bitmap) {
-        PyMem_Free(self->bitmap);
+    if (self->blocks) {
+        PyMem_Free(self->blocks);
     }
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
@@ -173,7 +166,8 @@ static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
     unsigned long long capacity;
     double fp_rate = 0.01;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "K|d", kwlist, &capacity, &fp_rate)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "K|d", kwlist, 
+                                     &capacity, &fp_rate)) {
         return -1;
     }
 
@@ -183,20 +177,20 @@ static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
     }
 
     if (fp_rate <= 0.0 || fp_rate >= 1.0) {
-        PyErr_SetString(PyExc_ValueError, "False positive rate must be between 0.0 and 1.0");
+        PyErr_SetString(PyExc_ValueError, 
+                        "False positive rate must be between 0.0 and 1.0");
         return -1;
     }
 
     self->capacity = capacity;
     self->fp_rate = fp_rate;
-    self->bit_count = calculate_optimal_bits(capacity, fp_rate);
-    self->k = calculate_optimal_hashes(self->bit_count, capacity);
-    self->block_count = self->bit_count >> BLOCK_SHIFT;
+    self->block_count = calculate_block_count(capacity, fp_rate);
+    self->block_mask = self->block_count - 1;
     self->item_count = 0;
 
-    uint64_t num_bytes = self->bit_count / 8;
-    self->bitmap = PyMem_Calloc(num_bytes, 1);
-    if (self->bitmap == NULL) {
+    size_t num_bytes = self->block_count * BLOCK_BYTES;
+    self->blocks = PyMem_Calloc(num_bytes, 1);
+    if (self->blocks == NULL) {
         PyErr_NoMemory();
         return -1;
     }
@@ -204,13 +198,13 @@ static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
     return 0;
 }
 
-static PyObject* BloomFilter_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
-    BloomFilter *self;
-    self = (BloomFilter *)type->tp_alloc(type, 0);
+static PyObject* BloomFilter_new(PyTypeObject *type, PyObject *args, 
+                                  PyObject *kwds) {
+    BloomFilter *self = (BloomFilter *)type->tp_alloc(type, 0);
     if (self != NULL) {
-        self->bitmap = NULL;
-        self->bit_count = 0;
-        self->k = 0;
+        self->blocks = NULL;
+        self->block_count = 0;
+        self->block_mask = 0;
         self->item_count = 0;
         self->capacity = 0;
         self->fp_rate = 0.0;
@@ -230,9 +224,11 @@ static PyGetSetDef BloomFilter_getsetters[] = {
     {"fp_rate", (getter)BloomFilter_get_fp_rate, NULL,
      "Target false positive rate", NULL},
     {"k", (getter)BloomFilter_get_k, NULL,
-     "Number of hash functions", NULL},
+     "Number of hash functions (always 8 for SBBF)", NULL},
     {"byte_count", (getter)BloomFilter_get_byte_count, NULL,
      "Memory usage in bytes", NULL},
+    {"bit_count", (getter)BloomFilter_get_bit_count, NULL,
+     "Total bits in filter", NULL},
     {NULL}
 };
 
@@ -244,7 +240,7 @@ static PySequenceMethods BloomFilter_as_sequence = {
 static PyTypeObject BloomFilterType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "_abloom.BloomFilter",
-    .tp_doc = "High-performance Bloom filter",
+    .tp_doc = "High-performance Split Block Bloom Filter",
     .tp_basicsize = sizeof(BloomFilter),
     .tp_itemsize = 0,
     .tp_flags = Py_TPFLAGS_DEFAULT,
@@ -259,7 +255,7 @@ static PyTypeObject BloomFilterType = {
 static PyModuleDef abloommodule = {
     PyModuleDef_HEAD_INIT,
     .m_name = "_abloom",
-    .m_doc = "High-performance Bloom filter for Python",
+    .m_doc = "High-performance Split Block Bloom Filter for Python",
     .m_size = -1,
 };
 
