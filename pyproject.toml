@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "abloom"
+version = "1.0.0"
+description = "High-performance Bloom filter for Python"
+requires-python = ">=3.7"
+readme = "README.md"
+license = {text = "MIT"}
+
+dependencies = []
+
+
+[tool.setuptools]
+packages = ["abloom"]
+
+[[tool.setuptools.ext-modules]]
+name = "abloom._abloom"
+sources = [
+    "abloom/_abloom.c",
+    "murmur3.c",
+]
+include-dirs = ["."]
+
+[dependency-groups]
+dev = [
+    "fastbloom-rs>=0.5.10",
+    "pytest>=7.4.4",
+    "pytest-benchmark>=4.0.0",
+    "rbloom>=1.5.4",
+]
