@@ -8,8 +8,12 @@ version = "0.1.0"
 description = "High-performance Bloom filter for Python"
 requires-python = ">=3.8"
 readme = "README.md"
+authors = [{ name = "Andrew Pribe", email = "andrewpribe@gmail.com" }]
 license = {text = "MIT"}
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/ampribe/abloom"
 
 [project.scripts]
 benchmark-report = "analysis.generate_benchmark_report:main"
