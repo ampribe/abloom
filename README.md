@@ -24,7 +24,7 @@ repr(bf) # '<BloomFilter capacity=1_000_000 items=5 fp_rate=0.01>'
 
 `abloom` relies on Python's built-in hash function, so types must implement `__hash__`. Python uses a unique seed for hashes within each process, so transferring Bloom filters between processes is not possible.
 
-`abloom` implements a split block Bloom filter with 512 bits per block and power-of-2 rounding for block count. This requires ~1.5-2x memory overhead compared to the standard implementation and can reduce performance for extremely high capacities or low false positive rates. The benchmark on 10M ints, 0.1% FPR shows this effect, though `abloom` is still significantly faster than alternative libraries. Below are overhead estimates for various FPRs. See [implementation](implementation.md) for additional implementation and memory usage details.
+`abloom` implements a split block Bloom filter with 512 bits per block and power-of-2 rounding for block count. This requires ~1.5-2x memory overhead compared to the standard implementation and can reduce performance for extremely high capacities or low false positive rates. The benchmark on 10M ints, 0.1% FPR shows this effect, though `abloom` is still significantly faster than alternative libraries. See [implementation](IMPLEMENTATION.md) for additional implementation and memory usage details.
 
 ## Testing
 
