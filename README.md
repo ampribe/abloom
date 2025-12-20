@@ -37,9 +37,8 @@ repr(bf) # '<BloomFilter capacity=1_000_000 items=4 fp_rate=0.01>'
 
 `abloom`'s optimizations require ~1.5-2x memory overhead compared to the standard implementation, which can reduce performance for extremely large workloads (high capacity, low FPR), though `abloom` is still faster than alternatives. See [implementation](https://github.com/ampribe/abloom/blob/main/docs/IMPLEMENTATION.md#21-memory-overhead-summary) for more details. 
 
-<details>
-<summary>Development</summary>
-## Testing
+## Development
+### Testing
 
 ```bash
 pip install -e ".[test]"
@@ -48,7 +47,7 @@ pytest tests/ --ignore=tests/test_benchmark.py -v
 
 Guide: [docs/TESTING.md](https://github.com/ampribe/abloom/blob/main/docs/TESTING.md)
 
-## Benchmarking
+### Benchmarking
 
 ```bash
 pip install -e ".[benchmark]"
@@ -56,4 +55,3 @@ pytest tests/test_benchmark.py --benchmark-only
 ```
 
 Results: [BENCHMARKS.md](https://github.com/ampribe/abloom/blob/main/BENCHMARKS.md) | Guide: [docs/BENCHMARKING.md](https://github.com/ampribe/abloom/blob/main/docs/BENCHMARKING.md)
-</details>
