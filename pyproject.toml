@@ -48,6 +48,7 @@ test = [
     "tox-uv>=1.0",
 ]
 benchmark = [
+    {include-group = "test"},
     "fastbloom-rs>=0.5.10",
     "pybloom-live>=4.0.0",
     "pybloomfiltermmap3>=0.6.3",

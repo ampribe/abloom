@@ -61,14 +61,14 @@ if word in spam_filter:
 ## Limitations
 `abloom` relies on Python's built-in hash function, so types must implement `__hash__`. Python uses a unique seed for hashes within each process, so transferring Bloom filters between processes is not possible.
 
-`abloom`'s optimizations require ~1.5-2x memory overhead compared to the standard implementation, which can reduce performance for extremely large workloads (high capacity, low FPR), though `abloom` is still faster than alternatives. See [implementation](https://github.com/ampribe/abloom/blob/main/docs/IMPLEMENTATION.md#21-memory-overhead-summary) for more details. 
+`abloom`'s optimizations require ~1.5-2x memory overhead compared to the standard implementation, which can reduce performance for extremely large workloads (high capacity, low FPR), though `abloom` is still faster than alternatives. See [implementation](https://github.com/ampribe/abloom/blob/main/docs/IMPLEMENTATION.md#21-memory-overhead) for more details. 
 
 ## Development
 ### Testing
 
 ```bash
-pip install -e ".[test]"
-pytest tests/ --ignore=tests/test_benchmark.py -v
+pip install -e . --group test
+python3 -m pytest tests/ --ignore=tests/test_benchmark.py -v
 ```
 
 See [Testing](https://github.com/ampribe/abloom/blob/main/docs/TESTING.md) for more details.
@@ -76,8 +76,8 @@ See [Testing](https://github.com/ampribe/abloom/blob/main/docs/TESTING.md) for m
 ### Benchmarking
 
 ```bash
-pip install -e ".[benchmark]"
-pytest tests/test_benchmark.py --benchmark-only
+pip install -e . --group benchmark
+python3 -m pytest tests/test_benchmark.py --benchmark-only
 ```
 
 See [Benchmarking](https://github.com/ampribe/abloom/blob/main/docs/BENCHMARKING.md) for more details.

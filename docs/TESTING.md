@@ -3,8 +3,8 @@
 ## Quick Start
 
 ```bash
-# Install dev dependencies
-pip install -e ".[test]"
+# Install test dependencies
+pip install -e . --group test
 
 # Run unit tests (fast)
 pytest tests/ --ignore=tests/test_benchmark.py --ignore=tests/test_fpr.py -v
@@ -51,10 +51,7 @@ abloom is tested on Python 3.8+ across Ubuntu, Windows, and macOS.
 ### Using tox (Local)
 
 ```bash
-# Install tox
-pip install tox
-
-# Run tests on all available Python versions
+pip install tox tox-uv
 tox
 
 # Run on specific version
@@ -72,10 +69,10 @@ See `.github/workflows/test.yml` for the full CI configuration.
 
 ## Test Dependencies
 
-Test dependencies are defined in `pyproject.toml` under `[project.optional-dependencies]`:
+Test dependencies are defined in `pyproject.toml` under `[dependency-groups]`:
 
 ```bash
-pip install -e ".[test]"
+pip install -e . --group test
 ```
 
 This installs:
