@@ -45,7 +45,7 @@ pip install -e ".[test]"
 pytest tests/ --ignore=tests/test_benchmark.py -v
 ```
 
-Guide: [docs/TESTING.md](https://github.com/ampribe/abloom/blob/main/docs/TESTING.md)
+See [Testing](https://github.com/ampribe/abloom/blob/main/docs/TESTING.md) for more details.
 
 ### Benchmarking
 
@@ -54,6 +54,4 @@ pip install -e ".[benchmark]"
 pytest tests/test_benchmark.py --benchmark-only
 ```
 
-Results: [BENCHMARKS.md](https://github.com/ampribe/abloom/blob/main/BENCHMARKS.md)
-
-Guide: [docs/BENCHMARKING.md](https://github.com/ampribe/abloom/blob/main/docs/BENCHMARKING.md)
+See [Benchmarking](https://github.com/ampribe/abloom/blob/main/docs/BENCHMARKING.md) for more details.
