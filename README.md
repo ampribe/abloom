@@ -6,7 +6,7 @@
 `abloom` is a high-performance Bloom filter implementation for Python, written in C.
 
 Why use `abloom`?
-- **Fast**: 2-3x faster than `rbloom` on add/update, 1.2x faster on lookup
+- **Fast**: **2-3x** faster than `rbloom` on add/update, **1.2x** faster on lookup
 - **Tested**: Python 3.8+ on Linux, MacOS, and Windows
 
 ## Quick Start
