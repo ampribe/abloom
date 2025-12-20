@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allow user to provide hash function and serialize
 - Possible optimizations for large allocations
 - Variants: Counting BF, Scalable BF
+- Add docstrings
 
 ## [0.2.0] - 2025-12-20
 ### Added

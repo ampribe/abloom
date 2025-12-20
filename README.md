@@ -1,7 +1,7 @@
 # abloom
 [![PyPI](https://img.shields.io/pypi/v/abloom)](https://pypi.org/project/abloom/)
 [![Python](https://img.shields.io/pypi/pyversions/abloom)](https://pypi.org/project/abloom/)
-[![Tests](https://github.com/ampribe/abloom/actions/workflows/test.yml/badge.svg)](https://github.com/ampribe/abloom/actions/workflows/test.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/ampribe/abloom/test.yml)](https://github.com/ampribe/abloom/actions/workflows/test.yml)
 
 `abloom` is a high-performance Bloom filter implementation for Python, written in C.
 
@@ -15,12 +15,13 @@ Install with `pip install abloom`.
 ```python
 from abloom import BloomFilter
 
-bf = BloomFilter(1_000_000, 0.01)
+bf = BloomFilter(1_000_000, 0.01)  # capacity, false positive rate
 bf.add(1)
-bf.update(["a","b","c"])
-assert 1 in bf
-assert 2 not in bf
-repr(bf) # '<BloomFilter capacity=1_000_000 items=4 fp_rate=0.01>'
+bf.update(["a", "b", "c"])
+
+1 in bf      # True
+2 in bf      # False
+len(bf)      # 4
 ```
 
 ## Benchmarks
@@ -31,6 +32,31 @@ repr(bf) # '<BloomFilter capacity=1_000_000 items=4 fp_rate=0.01>'
 | Update | - | - | 112.2ms | 16.2ms | **6.7ms** | 2.43x |
 
 *1M integers, 1% FPR, Apple M2. Full results [here](https://github.com/ampribe/abloom/blob/main/BENCHMARKS.md).*
+
+## Use Cases
+### Database Optimization
+```python
+user_cache = BloomFilter(10_000_000, 0.01)
+if user_id not in user_cache:
+    return None           # Definitely not in DB
+return db.query(user_id)  # Probably in DB
+```
+
+### Web Crawling
+```python
+seen = BloomFilter(10_000_000, 0.001)
+if url not in seen:
+    seen.add(url)
+    crawl(url)
+```
+
+### Spam Detection
+```python
+spam_filter = BloomFilter(1_000_000, 0.001)
+spam_filter.update(spam_words)
+if word in spam_filter:
+    flag_as_potential_spam()
+```
 
 ## Limitations
 `abloom` relies on Python's built-in hash function, so types must implement `__hash__`. Python uses a unique seed for hashes within each process, so transferring Bloom filters between processes is not possible.
