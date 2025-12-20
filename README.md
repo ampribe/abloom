@@ -1,9 +1,11 @@
 # abloom
+![Tests](https://github.com/YOUR_USERNAME/abloom/actions/workflows/test.yml/badge.svg)
+![Python Versions](https://img.shields.io/pypi/pyversions/abloom)
 `abloom` is a high-performance Bloom filter implementation for Python, written in C.
 
 Why use `abloom`?
 - `abloom` significantly outperforms all other Python Bloom filter libraries. It's 2.77x faster on `add`, 2.43x faster on `update`, and 1.34x faster on lookups than the next fastest implementation, `rbloom` (1M ints, 1% FPR). Complete benchmark results [here](BENCHMARK.md).
-- `abloom` is rigorously tested for Python versions >= 3.8
+- `abloom` is rigorously tested for Python versions >= 3.8 on Ubuntu, Windows, and macOS. 
 
 ## Usage
 Install with `pip install abloom`. 
