@@ -35,7 +35,7 @@ An SBBF consists of $B$-bit blocks, each split into $k$ sub-blocks of $w = B/k$ 
 ### 1.2 Block Selection
 Since the block count is a power of 2, the block index can be computed from the upper 32 bits of the 64-bit hash $h$ using a bitwise `&` instead of modulo.
 
-$$i=(h>>32) \& (\text{blockcount} - 1)$$
+$$i=(h>>32) \wedge (\text{blockcount} - 1)$$
 
 ### 1.3 Bit Position Generation
 The Parquet implementation defines 8 precomputed salts $s_i$ that can be combined with the lower 32 bits $\text{hlow}$ of the hash to generate 8 randomly distributed indices. Here, the indices are in the range 0-63.
