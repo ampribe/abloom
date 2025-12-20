@@ -38,8 +38,8 @@ Since the block count is a power of 2, the block index can be computed from the 
 $$i=(h>>32) \& (\text{blockcount} - 1)$$
 
 ### 1.3 Bit Position Generation
-The Parquet implementation defines 8 precomputed salts $s_i$ that can be combined with the lower 32 bits $\text{h_low}$ of the hash to generate 8 randomly distributed indices. Here, the indices are in the range 0-63.
-$$\text{bit}_i=(\text{h_low}*s_i)>>26$$
+The Parquet implementation defines 8 precomputed salts $s_i$ that can be combined with the lower 32 bits $\text{hlow}$ of the hash to generate 8 randomly distributed indices. Here, the indices are in the range 0-63.
+$$\text{bit}_i=(\text{hlow}*s_i)>>26$$
 
 Salt constants (from the Parquet specification):
 ```
