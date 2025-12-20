@@ -1,0 +1,16 @@
+build
+abloom.egg-info
+__pycache__
+.benchmarks
+.pytest_cache
+.venv
+.vscode
+*.so
+*.dylib
+*.pyd
+.hypothesis
+.claude
+.tox
+*.egg
+*.whl
+dist
