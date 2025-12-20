@@ -86,6 +86,8 @@ This is a **38.6% average memory overhead** on top of the theoretical SBBF-512 r
 The tables below show the memory overhead for SBBF compared to the standard implementation and validate the LUT approach to approximating the required bits per element.
 
 ### 2.1 Memory Overhead Summary
+`abloom` requires ~1.5-2x memory overhead compared to a standard Bloom Filter implementation on standard workloads (1%, 0.1% FPR). This can reduce performance for extremely high capacities or low false positive rates since the filter will not fit within cache and accesses will incur more expensive memory accesses. The benchmark on 10M ints, 0.1% FPR shows this effect, though `abloom` is still significantly faster than alternative libraries.
+
 Bits per element (SBBF-512+pow2 = SBBF-512 × 1.386):
 
 ```
@@ -97,7 +99,7 @@ Bits per element (SBBF-512+pow2 = SBBF-512 × 1.386):
  0.010% |    19.17 |     23.61 |         32.72 |    +70.7%
  0.001% |    23.96 |     34.98 |         48.49 |   +102.4%
 ```
-### 2.2 Memory Overhead Comparison (`compare_bf.py`)
+### 2.2 Memory Overhead Comparison (`scripts/compare_bf.py`)
 
 #### Bits Per Element
 Units = Bits per Element
@@ -164,7 +166,7 @@ Power-of-2 rounding overhead:
 |    0.00050% |       +84.7% |       +55.0% |        +114.8% |
 |    0.00010% |      +124.9% |       +80.4% |        +150.1% |
 
-### 2.3 LUT Table Accuracy (`generate_lut.py --verify`)
+### 2.3 LUT Table Accuracy (`scripts/generate_lut.py --verify`)
 The lookup table provides <0.18% max error for FPR ∈ [0.0001%, 50%] with 39 floats.
 
 
