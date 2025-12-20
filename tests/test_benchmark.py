@@ -7,6 +7,7 @@ from abloom import BloomFilter as ABloomFilter
 from rbloom import Bloom as RBloomFilter
 from pybloom_live import BloomFilter as PyBloom
 from fastbloom_rs import BloomFilter as FastBloomFilter
+from pybloomfilter import BloomFilter as PyBloomFilterMmap
 
 # ============ CONFIGURATION ============
 
@@ -15,6 +16,7 @@ LIBRARIES = {
     "rbloom": RBloomFilter,
     "pybloom_live": PyBloom,
     "fastbloom_rs": FastBloomFilter,
+    "pybloomfiltermmap": PyBloomFilterMmap,
 }
 
 @dataclass(frozen=True)
