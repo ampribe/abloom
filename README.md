@@ -1,6 +1,6 @@
 # abloom
-![Tests](https://github.com/YOUR_USERNAME/abloom/actions/workflows/test.yml/badge.svg)
-![Python Versions](https://img.shields.io/pypi/pyversions/abloom)
+[![Tests](https://github.com/ampribe/abloom/actions/workflows/test.yml/badge.svg)](https://github.com/ampribe/abloom/actions/workflows/test.yml)
+
 `abloom` is a high-performance Bloom filter implementation for Python, written in C.
 
 Why use `abloom`?
