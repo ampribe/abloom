@@ -32,6 +32,15 @@ static const float SBBF512_LUT[] = {
     43.7396f, 46.4143f, 49.2614f, 52.2942f};
 #define SBBF512_LUT_SIZE 39
 
+static inline uint64_t mix64(uint64_t x) {
+  x ^= x >> 33;
+  x *= 0xff51afd7ed558ccdULL;
+  x ^= x >> 33;
+  x *= 0xc4ceb9fe1a85ec53ULL;
+  x ^= x >> 33;
+  return x;
+}
+
 static uint64_t next_power_of_2(uint64_t n) {
   if (n == 0)
     return 1;
@@ -104,10 +113,11 @@ static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
   uint64_t block_idx = (hash >> 32) & bf->block_mask;
   uint32_t h_low = (uint32_t)hash;
   uint64_t *block = &bf->blocks[block_idx * BLOCK_WORDS];
-  
-  #define CHECK_WORD(i) \
-      if (!(block[i] & (1ULL << ((h_low * SALT[i]) >> 26)))) return 0
-  
+
+#define CHECK_WORD(i)                                                          \
+  if (!(block[i] & (1ULL << ((h_low * SALT[i]) >> 26))))                       \
+  return 0
+
   CHECK_WORD(0);
   CHECK_WORD(1);
   CHECK_WORD(2);
@@ -116,17 +126,42 @@ static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
   CHECK_WORD(5);
   CHECK_WORD(6);
   CHECK_WORD(7);
-  
+
   return 1;
-  #undef CHECK_WORD
+#undef CHECK_WORD
 }
 
 static int get_hash(PyObject *item, uint64_t *out_hash) {
   Py_hash_t py_hash = PyObject_Hash(item);
-    if (py_hash == -1 && PyErr_Occurred()) return -1;
-    *out_hash = (uint64_t)py_hash;
+  if (py_hash == -1 && PyErr_Occurred()) return -1;
 
+  // try mixing first
+  *out_hash = mix64((uint64_t)py_hash);
   return 0;
+}
+
+static PyObject *BloomFilter_update(BloomFilter *self, PyObject *iterable) {
+  PyObject *iter = PyObject_GetIter(iterable);
+  if (iter == NULL)
+    return NULL;
+
+  PyObject *item;
+  while ((item = PyIter_Next(iter)) != NULL) {
+    uint64_t hash;
+    if (get_hash(item, &hash) < 0) {
+      Py_DECREF(item);
+      Py_DECREF(iter);
+      return NULL;
+    }
+    bloom_insert(self, hash);
+    self->item_count++;
+    Py_DECREF(item);
+  }
+  Py_DECREF(iter);
+
+  if (PyErr_Occurred())
+    return NULL;
+  Py_RETURN_NONE;
 }
 
 static PyObject *BloomFilter_add(BloomFilter *self, PyObject *item) {
@@ -235,6 +270,8 @@ static PyObject *BloomFilter_new(PyTypeObject *type, PyObject *args,
 static PyMethodDef BloomFilter_methods[] = {
     {"add", (PyCFunction)BloomFilter_add, METH_O,
      "Add an item to the bloom filter"},
+    {"update", (PyCFunction)BloomFilter_update, METH_O,
+     "Add items from an iterable to the bloom filter"},
     {NULL}};
 
 static PyGetSetDef BloomFilter_getsetters[] = {
