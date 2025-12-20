@@ -32,4 +32,4 @@ jobs:
         run: pip install -e .
 
       - name: Run tests
-        run: pytest tests/ --ignore=tests/test_benchmark.py -v
+        run: pytest tests/ --ignore=tests/test_benchmark.py -v -o "addopts="
