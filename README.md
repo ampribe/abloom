@@ -55,4 +55,5 @@ pytest tests/test_benchmark.py --benchmark-only
 ```
 
 Results: [BENCHMARKS.md](https://github.com/ampribe/abloom/blob/main/BENCHMARKS.md)
+
 Guide: [docs/BENCHMARKING.md](https://github.com/ampribe/abloom/blob/main/docs/BENCHMARKING.md)
