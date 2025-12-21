@@ -1,4 +1,4 @@
-<img src="logo.png" alt="abloom logo" style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><br>
+<img src="assets/logo.png" alt="abloom logo" style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><br>
 
 [![PyPI](https://img.shields.io/pypi/v/abloom)](https://pypi.org/project/abloom/)
 [![Python](https://img.shields.io/pypi/pyversions/abloom)](https://pypi.org/project/abloom/)
