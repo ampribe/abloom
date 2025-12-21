@@ -3,16 +3,14 @@ name: Test
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "*.md"
-      - "docs/**"
-      - "LICENSE"
+    paths:
+      - "abloom/**"
+      - "tests/**"
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "*.md"
-      - "docs/**"
-      - "LICENSE"
+    paths:
+      - "abloom/**"
+      - "tests/**"
 
 jobs:
   test:
