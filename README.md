@@ -1,4 +1,7 @@
-# abloom
+<p align="center">
+  <img src="assets/logo.png" alt="abloom logo" width="400">
+</p><br>
+
 [![PyPI](https://img.shields.io/pypi/v/abloom)](https://pypi.org/project/abloom/)
 [![Python](https://img.shields.io/pypi/pyversions/abloom)](https://pypi.org/project/abloom/)
 [![Tests](https://img.shields.io/github/actions/workflow/status/ampribe/abloom/test.yml)](https://github.com/ampribe/abloom/actions/workflows/test.yml)
@@ -68,7 +71,7 @@ if word in spam_filter:
 
 ```bash
 pip install -e . --group test
-python3 -m pytest tests/ --ignore=tests/test_benchmark.py -v
+pytest tests/ --ignore=tests/test_benchmark.py -v
 ```
 
 See [Testing](https://github.com/ampribe/abloom/blob/main/docs/TESTING.md) for more details.
@@ -77,7 +80,7 @@ See [Testing](https://github.com/ampribe/abloom/blob/main/docs/TESTING.md) for m
 
 ```bash
 pip install -e . --group benchmark
-python3 -m pytest tests/test_benchmark.py --benchmark-only
+pytest tests/test_benchmark.py --benchmark-only
 ```
 
 See [Benchmarking](https://github.com/ampribe/abloom/blob/main/docs/BENCHMARKING.md) for more details.
