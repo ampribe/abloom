@@ -18,7 +18,6 @@ typedef struct {
   PyObject_HEAD uint64_t *blocks;
   uint64_t block_count;
   uint64_t block_mask;
-  uint64_t item_count;
   uint64_t capacity;
   double fp_rate;
 } BloomFilter;
@@ -140,6 +139,141 @@ static int get_hash(PyObject *item, uint64_t *out_hash) {
   return 0;
 }
 
+static int BloomFilter_compatible(BloomFilter *self, BloomFilter *other) {
+  return self->capacity == other->capacity && self->fp_rate == other->fp_rate;
+}
+
+static PyObject *BloomFilter_richcompare(BloomFilter *self, PyObject *other, int op) {
+  if (op != Py_EQ && op != Py_NE) {
+    Py_RETURN_NOTIMPLEMENTED;
+  }
+
+  if (!PyObject_TypeCheck(other, Py_TYPE(self))) {
+    Py_RETURN_NOTIMPLEMENTED;
+  }
+
+  BloomFilter *other_bf = (BloomFilter *)other;
+
+  int equal = BloomFilter_compatible(self, other_bf);
+
+  if (equal) {
+    size_t num_bytes = self->block_count * BLOCK_BYTES;
+    equal = (memcmp(self->blocks, other_bf->blocks, num_bytes) == 0);
+  }
+
+  if (op == Py_EQ) {
+    return PyBool_FromLong(equal);
+  } else {
+    return PyBool_FromLong(!equal);
+  }
+}
+
+static PyObject *BloomFilter_or(BloomFilter *self, PyObject *other) {
+  if (!PyObject_TypeCheck(other, Py_TYPE(self))) {
+    Py_RETURN_NOTIMPLEMENTED;
+  }
+
+  BloomFilter *other_bf = (BloomFilter *)other;
+
+  if (!BloomFilter_compatible(self, other_bf)) {
+    PyErr_SetString(PyExc_ValueError,
+                    "BloomFilters must have the same capacity and fp_rate");
+    return NULL;
+  }
+
+  BloomFilter *result =
+      (BloomFilter *)Py_TYPE(self)->tp_alloc(Py_TYPE(self), 0);
+  if (result == NULL) {
+    return NULL;
+  }
+
+  result->block_count = self->block_count;
+  result->block_mask = self->block_mask;
+  result->capacity = self->capacity;
+  result->fp_rate = self->fp_rate;
+
+  size_t num_bytes = self->block_count * BLOCK_BYTES;
+  result->blocks = PyMem_Malloc(num_bytes);
+  if (result->blocks == NULL) {
+    Py_DECREF(result);
+    return PyErr_NoMemory();
+  }
+
+  uint64_t *self_blocks = self->blocks;
+  uint64_t *other_blocks = other_bf->blocks;
+  uint64_t *result_blocks = result->blocks;
+  size_t num_words = self->block_count * BLOCK_WORDS;
+
+  for (size_t i = 0; i < num_words; i++) {
+    result_blocks[i] = self_blocks[i] | other_blocks[i];
+  }
+
+  return (PyObject *)result;
+}
+
+static PyObject *BloomFilter_ior(BloomFilter *self, PyObject *other) {
+  if (!PyObject_TypeCheck(other, Py_TYPE(self))) {
+    Py_RETURN_NOTIMPLEMENTED;
+  }
+
+  BloomFilter *other_bf = (BloomFilter *)other;
+
+  if (!BloomFilter_compatible(self, other_bf)) {
+    PyErr_SetString(PyExc_ValueError,
+                    "BloomFilters must have the same capacity and fp_rate");
+    return NULL;
+  }
+
+  uint64_t *self_blocks = self->blocks;
+  uint64_t *other_blocks = other_bf->blocks;
+  size_t num_words = self->block_count * BLOCK_WORDS;
+
+  for (size_t i = 0; i < num_words; i++) {
+    self_blocks[i] |= other_blocks[i];
+  }
+
+  Py_INCREF(self);
+  return (PyObject *)self;
+}
+
+static int BloomFilter_bool(BloomFilter *self) {
+  size_t num_words = self->block_count * BLOCK_WORDS;
+  for (size_t i = 0; i < num_words; i++) {
+    if (self->blocks[i] != 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static PyObject *BloomFilter_clear(BloomFilter *self, PyObject *Py_UNUSED(ignored)) {
+  size_t num_bytes = self->block_count * BLOCK_BYTES;
+  memset(self->blocks, 0, num_bytes);
+  Py_RETURN_NONE;
+}
+
+static PyObject *BloomFilter_copy(BloomFilter *self, PyObject *Py_UNUSED(ignored)) {
+  BloomFilter *copy = (BloomFilter *)Py_TYPE(self)->tp_alloc(Py_TYPE(self), 0);
+  if (copy == NULL) {
+    return NULL;
+  }
+
+  copy->block_count = self->block_count;
+  copy->block_mask = self->block_mask;
+  copy->capacity = self->capacity;
+  copy->fp_rate = self->fp_rate;
+
+  size_t num_bytes = self->block_count * BLOCK_BYTES;
+  copy->blocks = PyMem_Malloc(num_bytes);
+  if (copy->blocks == NULL) {
+    Py_DECREF(copy);
+    return PyErr_NoMemory();
+  }
+  memcpy(copy->blocks, self->blocks, num_bytes);
+
+  return (PyObject *)copy;
+}
+
 static PyObject *BloomFilter_update(BloomFilter *self, PyObject *iterable) {
   PyObject *iter = PyObject_GetIter(iterable);
   if (iter == NULL)
@@ -154,7 +288,6 @@ static PyObject *BloomFilter_update(BloomFilter *self, PyObject *iterable) {
       return NULL;
     }
     bloom_insert(self, hash);
-    self->item_count++;
     Py_DECREF(item);
   }
   Py_DECREF(iter);
@@ -170,7 +303,6 @@ static PyObject *BloomFilter_add(BloomFilter *self, PyObject *item) {
     return NULL;
 
   bloom_insert(self, hash);
-  self->item_count++;
 
   Py_RETURN_NONE;
 }
@@ -181,10 +313,6 @@ static int BloomFilter_contains(BloomFilter *self, PyObject *item) {
     return -1;
 
   return bloom_check(self, hash);
-}
-
-static Py_ssize_t BloomFilter_len(BloomFilter *self) {
-  return (Py_ssize_t)self->item_count;
 }
 
 static PyObject *BloomFilter_get_capacity(BloomFilter *self, void *closure) {
@@ -241,7 +369,6 @@ static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
   self->fp_rate = fp_rate;
   self->block_count = calculate_block_count(capacity, fp_rate);
   self->block_mask = self->block_count - 1;
-  self->item_count = 0;
 
   size_t num_bytes = self->block_count * BLOCK_BYTES;
   self->blocks = PyMem_Calloc(num_bytes, 1);
@@ -260,7 +387,6 @@ static PyObject *BloomFilter_new(PyTypeObject *type, PyObject *args,
     self->blocks = NULL;
     self->block_count = 0;
     self->block_mask = 0;
-    self->item_count = 0;
     self->capacity = 0;
     self->fp_rate = 0.0;
   }
@@ -272,6 +398,10 @@ static PyMethodDef BloomFilter_methods[] = {
      "Add an item to the bloom filter"},
     {"update", (PyCFunction)BloomFilter_update, METH_O,
      "Add items from an iterable to the bloom filter"},
+    {"copy", (PyCFunction)BloomFilter_copy, METH_NOARGS,
+     "Return a shallow copy of the bloom filter"},
+    {"clear", (PyCFunction)BloomFilter_clear, METH_NOARGS,
+     "Remove all items from the bloom filter"},
     {NULL}};
 
 static PyGetSetDef BloomFilter_getsetters[] = {
@@ -288,8 +418,13 @@ static PyGetSetDef BloomFilter_getsetters[] = {
     {NULL}};
 
 static PySequenceMethods BloomFilter_as_sequence = {
-    .sq_length = (lenfunc)BloomFilter_len,
     .sq_contains = (objobjproc)BloomFilter_contains,
+};
+
+static PyNumberMethods BloomFilter_as_number = {
+    .nb_bool = (inquiry)BloomFilter_bool,
+    .nb_or = (binaryfunc)BloomFilter_or,
+    .nb_inplace_or = (binaryfunc)BloomFilter_ior,
 };
 
 static PyObject *BloomFilter_repr(BloomFilter *self) {
@@ -298,8 +433,8 @@ static PyObject *BloomFilter_repr(BloomFilter *self) {
     return NULL;
 
   PyObject *repr =
-      PyUnicode_FromFormat("<BloomFilter capacity=%llu items=%llu fp_rate=%R>",
-                           self->capacity, self->item_count, fp_obj);
+      PyUnicode_FromFormat("<BloomFilter capacity=%llu fp_rate=%R>",
+                           self->capacity, fp_obj);
 
   Py_DECREF(fp_obj);
   return repr;
@@ -315,9 +450,11 @@ static PyTypeObject BloomFilterType = {
     .tp_init = (initproc)BloomFilter_init,
     .tp_dealloc = (destructor)BloomFilter_dealloc,
     .tp_repr = (reprfunc)BloomFilter_repr,
+    .tp_richcompare = (richcmpfunc)BloomFilter_richcompare,
     .tp_methods = BloomFilter_methods,
     .tp_getset = BloomFilter_getsetters,
     .tp_as_sequence = &BloomFilter_as_sequence,
+    .tp_as_number = &BloomFilter_as_number,
 };
 
 static PyModuleDef abloommodule = {
