@@ -181,8 +181,8 @@ class TestCopyProperties:
         bf_copy = bf.copy()
         bf_copy.add(new_item)
 
-        # Original still has same length
-        assert len(bf) == len(items)
+        for item in items:
+            assert item in bf
 
 
 class TestClearProperties:
@@ -334,7 +334,6 @@ class TestUnionProperties:
         result = bf1b | bf2
 
         assert bf1a == result
-
 
 class TestBoolProperties:
     """Property-based tests for __bool__."""

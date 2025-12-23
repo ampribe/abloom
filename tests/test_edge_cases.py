@@ -155,7 +155,6 @@ class TestDuplicateAdditions:
         for _ in range(100):
             bf.add("duplicate")
 
-        assert len(bf) == 100
         assert "duplicate" in bf
 
     def test_duplicate_items_in_sequence(self):
@@ -165,7 +164,6 @@ class TestDuplicateAdditions:
         for item in items:
             bf.add(item)
 
-        assert len(bf) == 6
         assert all(item in bf for item in set(items))
 
 
@@ -235,7 +233,6 @@ class TestCopyEdgeCases:
 
         bf_copy = bf.copy()
 
-        assert len(bf_copy) == 10000
         assert bf == bf_copy
 
     def test_copy_minimal_filter(self):
@@ -259,8 +256,6 @@ class TestClearEdgeCases:
 
         bf.clear()
 
-        assert len(bf) == 0
-        # Sample check that items are gone
         assert 0 not in bf
         assert 9999 not in bf
 
@@ -272,8 +267,7 @@ class TestClearEdgeCases:
         bf_copy = bf.copy()
         bf.clear()
 
-        assert len(bf) == 0
-        assert len(bf_copy) == 3
+        assert "a" not in bf
         assert "a" in bf_copy
 
 

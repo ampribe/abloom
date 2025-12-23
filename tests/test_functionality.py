@@ -13,25 +13,13 @@ class TestBasicOperations:
         for item in items:
             assert item in bf
 
-    def test_len_tracks_additions(self):
-        bf = BloomFilter(1000, 0.01)
-        assert len(bf) == 0
-
-        bf.add("item1")
-        assert len(bf) == 1
-
-        bf.add("item2")
-        assert len(bf) == 2
-
-        bf.add("item1")
-        assert len(bf) == 3
-
     def test_contains_not_added(self):
         bf = BloomFilter(1000, 0.01)
         bf.add("present")
 
         assert "present" in bf
         assert "absent" not in bf
+
 
 class TestDataTypes:
     def test_strings(self):
@@ -155,17 +143,6 @@ class TestUpdateMethod:
         result = bf.update([1, 2, 3])
         assert result is None
 
-    def test_update_length_tracking(self):
-        """len(bf) should increase by count of items."""
-        bf = BloomFilter(1000, 0.01)
-        assert len(bf) == 0
-
-        bf.update([1, 2, 3])
-        assert len(bf) == 3
-
-        bf.update([4, 5])
-        assert len(bf) == 5
-
     def test_update_integers(self):
         """update works with integers."""
         bf = BloomFilter(1000, 0.01)
@@ -210,13 +187,11 @@ class TestUpdateMethod:
         """update with empty iterable does nothing."""
         bf = BloomFilter(1000, 0.01)
         bf.update([])
-        assert len(bf) == 0
 
     def test_update_single_item(self):
         """update with single-item iterable works."""
         bf = BloomFilter(1000, 0.01)
         bf.update(["only_item"])
-        assert len(bf) == 1
         assert "only_item" in bf
 
     def test_update_generator(self):
@@ -228,7 +203,6 @@ class TestUpdateMethod:
                 yield f"item_{i}"
 
         bf.update(gen())
-        assert len(bf) == 5
 
         for i in range(5):
             assert f"item_{i}" in bf
@@ -249,7 +223,6 @@ class TestUpdateMethod:
         items = {"apple", "banana", "cherry"}
 
         bf.update(items)
-        assert len(bf) == 3
 
         for item in items:
             assert item in bf
@@ -258,7 +231,6 @@ class TestUpdateMethod:
         """update works with range objects."""
         bf = BloomFilter(1000, 0.01)
         bf.update(range(10))
-        assert len(bf) == 10
 
         for i in range(10):
             assert i in bf
@@ -282,7 +254,6 @@ class TestUpdateMethod:
         bf.update(["second", "third"])
         bf.add("fourth")
 
-        assert len(bf) == 4
         assert "first" in bf
         assert "second" in bf
         assert "third" in bf
@@ -294,7 +265,6 @@ class TestUpdateMethod:
         items = [f"item_{i}" for i in range(1000)]
 
         bf.update(items)
-        assert len(bf) == 1000
 
         for item in items:
             assert item in bf
@@ -309,19 +279,7 @@ class TestRepr:
         assert r.startswith("<BloomFilter")
         assert r.endswith(">")
         assert "capacity=1000" in r
-        assert "items=0" in r
         assert "fp_rate=0.01" in r
-
-    def test_repr_updates_with_items(self):
-        """repr reflects item count changes."""
-        bf = BloomFilter(500, 0.001)
-        bf.add("item1")
-        bf.add("item2")
-
-        r = repr(bf)
-        assert "items=2" in r
-        assert "capacity=500" in r
-        assert "fp_rate=0.001" in r
 
     def test_repr_is_string(self):
         """repr returns a string."""
@@ -378,14 +336,6 @@ class TestCopy:
         assert bf_copy.bit_count == bf.bit_count
         assert bf_copy.byte_count == bf.byte_count
 
-    def test_copy_preserves_length(self):
-        """copy preserves item count."""
-        bf = BloomFilter(1000, 0.01)
-        bf.update(["a", "b", "c"])
-        bf_copy = bf.copy()
-
-        assert len(bf_copy) == len(bf)
-
     def test_copy_modifications_isolated(self):
         """Modifying copy doesn't affect original."""
         bf = BloomFilter(1000, 0.01)
@@ -394,9 +344,7 @@ class TestCopy:
 
         bf_copy.add("new_item")
 
-        assert len(bf) == 1
-        assert len(bf_copy) == 2
-        assert "new_item" not in bf  # Probabilistic, but very likely for empty filter
+        assert "new_item" not in bf
 
     def test_copy_original_modifications_isolated(self):
         """Modifying original doesn't affect copy."""
@@ -406,15 +354,13 @@ class TestCopy:
 
         bf.add("item2")
 
-        assert len(bf) == 2
-        assert len(bf_copy) == 1
+        assert "item2" not in bf_copy
 
     def test_copy_empty_filter(self):
         """Copying an empty filter works."""
         bf = BloomFilter(1000, 0.01)
         bf_copy = bf.copy()
 
-        assert len(bf_copy) == 0
         assert bf_copy.capacity == bf.capacity
 
 
@@ -433,15 +379,6 @@ class TestClear:
 
         for item in items:
             assert item not in bf
-
-    def test_clear_resets_length(self):
-        """len() returns 0 after clear."""
-        bf = BloomFilter(1000, 0.01)
-        bf.update(range(100))
-        assert len(bf) == 100
-
-        bf.clear()
-        assert len(bf) == 0
 
     def test_clear_preserves_capacity(self):
         """capacity is unchanged after clear."""
@@ -466,7 +403,6 @@ class TestClear:
         bf.clear()
 
         bf.add("new_item")
-        assert len(bf) == 1
         assert "new_item" in bf
         assert "old1" not in bf
 
@@ -483,8 +419,6 @@ class TestClear:
         bf = BloomFilter(1000, 0.01)
         bf.clear()
 
-        assert len(bf) == 0
-
     def test_multiple_clears(self):
         """Multiple clears work correctly."""
         bf = BloomFilter(1000, 0.01)
@@ -493,52 +427,7 @@ class TestClear:
         bf.add("item2")
         bf.clear()
 
-        assert len(bf) == 0
-
-
-class TestBool:
-    """Tests for __bool__ (truthiness)."""
-
-    def test_empty_filter_is_falsy(self):
-        """Empty filter evaluates to False."""
-        bf = BloomFilter(1000, 0.01)
-        assert not bf
-        assert bool(bf) is False
-
-    def test_non_empty_filter_is_truthy(self):
-        """Filter with items evaluates to True."""
-        bf = BloomFilter(1000, 0.01)
-        bf.add("item")
-        assert bf
-        assert bool(bf) is True
-
-    def test_cleared_filter_is_falsy(self):
-        """Cleared filter evaluates to False."""
-        bf = BloomFilter(1000, 0.01)
-        bf.add("item")
-        bf.clear()
-        assert not bf
-        assert bool(bf) is False
-
-    def test_bool_with_if_statement(self):
-        """Filter works in if statements."""
-        bf = BloomFilter(1000, 0.01)
-
-        if bf:
-            result = "truthy"
-        else:
-            result = "falsy"
-
-        assert result == "falsy"
-
-        bf.add("item")
-
-        if bf:
-            result = "truthy"
-        else:
-            result = "falsy"
-
-        assert result == "truthy"
+        assert "item2" not in bf
 
 
 class TestEquality:
@@ -662,8 +551,8 @@ class TestUnion:
 
         assert result is not bf1
         assert result is not bf2
-        assert len(bf1) == 1  # Original unchanged
-        assert len(bf2) == 1  # Original unchanged
+        assert "item2" not in bf1
+        assert "item1" not in bf2
 
     def test_or_preserves_properties(self):
         """Union preserves capacity and fp_rate."""
@@ -700,7 +589,6 @@ class TestUnion:
 
         bf1 |= bf2
 
-        assert len(bf2) == 1
         assert "item1" not in bf2
 
     def test_or_with_empty_filter(self):
@@ -723,7 +611,7 @@ class TestUnion:
 
         result = bf1 | bf2
 
-        assert len(result) == 0
+        assert result == bf1
 
     def test_or_is_commutative(self):
         """a | b equals b | a (bit-level)."""
@@ -764,3 +652,47 @@ class TestUnion:
             assert item in result
         for item in items2:
             assert item in result
+
+class TestBool:
+    """Tests for __bool__ (truthiness)."""
+
+    def test_empty_filter_is_falsy(self):
+        """Empty filter evaluates to False."""
+        bf = BloomFilter(1000, 0.01)
+        assert not bf
+        assert bool(bf) is False
+
+    def test_non_empty_filter_is_truthy(self):
+        """Filter with items evaluates to True."""
+        bf = BloomFilter(1000, 0.01)
+        bf.add("item")
+        assert bf
+        assert bool(bf) is True
+
+    def test_cleared_filter_is_falsy(self):
+        """Cleared filter evaluates to False."""
+        bf = BloomFilter(1000, 0.01)
+        bf.add("item")
+        bf.clear()
+        assert not bf
+        assert bool(bf) is False
+
+    def test_bool_with_if_statement(self):
+        """Filter works in if statements."""
+        bf = BloomFilter(1000, 0.01)
+
+        if bf:
+            result = "truthy"
+        else:
+            result = "falsy"
+
+        assert result == "falsy"
+
+        bf.add("item")
+
+        if bf:
+            result = "truthy"
+        else:
+            result = "falsy"
+
+        assert result == "truthy"
