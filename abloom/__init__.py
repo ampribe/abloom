@@ -2,7 +2,9 @@
 abloom - A high-performance Bloom filter for Python
 """
 
+from importlib.metadata import version
+
 from abloom._abloom import BloomFilter
 
-__version__ = '0.1.0'
+__version__ = version("abloom")
 __all__ = ['BloomFilter']
