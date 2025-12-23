@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Planned
+- Allow user to provide hash function and serialize
+- Possible optimizations for large allocations
+- Variants: Counting BF, Scalable BF
+
+## [0.3.0] - 2025-12-23
 ### Added
 - `copy()` method to create a deep copy of a Bloom filter
 - `clear()` method to reset the filter while preserving capacity
@@ -13,11 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `__eq__` method for equality comparison between filters
 - `__or__` and `__ior__` methods
 - Docstrings
+- Wheel for Python 3.14
 
-### Planned
-- Allow user to provide hash function and serialize
-- Possible optimizations for large allocations
-- Variants: Counting BF, Scalable BF
+### Removed
+- Look up table, just compute size directly
+- `len` method
 
 ## [0.2.0] - 2025-12-20
 ### Added

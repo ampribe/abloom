@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "abloom"
-version = "0.2.0"
+version = "0.3.0"
 description = "High-performance Bloom filter for Python"
 requires-python = ">=3.8"
 readme = "README.md"
@@ -15,6 +15,10 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -22,8 +26,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: C",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
 ]
 
 [project.urls]
@@ -52,6 +57,7 @@ benchmark = [
     "fastbloom-rs>=0.5.10",
     "pybloom-live>=4.0.0",
     "pybloomfiltermmap3>=0.6.3",
+    "pyfusefilter>=1.2.1",
     "rbloom>=1.5.4",
 ]
 dev = [
