@@ -20,9 +20,11 @@ bf = BloomFilter(1_000_000, 0.01)  # capacity, false positive rate
 bf.add(1)
 bf.update(["a", "b", "c"])
 
-1 in bf      # True
-2 in bf      # False
-len(bf)      # 4
+1 in bf                 # True
+2 in bf                 # False
+bf2 = bf.copy()         # duplicate filter
+combined = bf | bf2     # union of filters
+bf.clear()              # reset to empty
 ```
 
 ## Benchmarks
