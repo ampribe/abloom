@@ -90,10 +90,84 @@ class BloomFilter:
         """
         ...
 
-    def __len__(self) -> int:
-        """Return the number of items that have been added to the filter.
+    def __eq__(self, other: object) -> bool:
+        """Test equality with another BloomFilter.
+
+        Two BloomFilters are equal if they have the same capacity, fp_rate,
+        and identical bit patterns.
+
+        Args:
+            other: Another object to compare with.
 
         Returns:
-            The count of items added via add() or update() methods.
+            True if both filters have the same parameters and bit content.
+        """
+        ...
+
+    def __ne__(self, other: object) -> bool:
+        """Test inequality with another BloomFilter.
+
+        Args:
+            other: Another object to compare with.
+
+        Returns:
+            True if filters differ in parameters or bit content.
+        """
+        ...
+
+    def __bool__(self) -> bool:
+        """Test if the filter is non-empty.
+
+        Returns:
+            True if any bits are set in the filter (items may have been added).
+            False if the filter is empty (no bits set).
+        """
+        ...
+
+    def __or__(self, other: BloomFilter) -> BloomFilter:
+        """Return the union of two BloomFilters.
+
+        Both filters must have the same capacity and fp_rate.
+
+        Args:
+            other: Another BloomFilter with matching parameters.
+
+        Returns:
+            A new BloomFilter containing all items from both filters.
+
+        Raises:
+            ValueError: If capacity or fp_rate differ between filters.
+        """
+        ...
+
+    def __ior__(self, other: BloomFilter) -> BloomFilter:
+        """Update this BloomFilter with the union of itself and another.
+
+        Both filters must have the same capacity and fp_rate.
+
+        Args:
+            other: Another BloomFilter with matching parameters.
+
+        Returns:
+            This BloomFilter (modified in place).
+
+        Raises:
+            ValueError: If capacity or fp_rate differ between filters.
+        """
+        ...
+
+    def copy(self) -> BloomFilter:
+        """Return a shallow copy of the bloom filter.
+
+        Returns:
+            A new BloomFilter with the same parameters and bit content.
+        """
+        ...
+
+    def clear(self) -> None:
+        """Remove all items from the bloom filter.
+
+        Resets the filter to its initial empty state while preserving
+        capacity and fp_rate settings.
         """
         ...
