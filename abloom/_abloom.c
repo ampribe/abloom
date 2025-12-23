@@ -22,14 +22,44 @@ typedef struct {
   double fp_rate;
 } BloomFilter;
 
-static const float SBBF512_LUT[] = {
-    3.2304f,  3.8302f,  4.3978f,  4.9555f,  5.5148f,  6.0828f,  6.6644f,
-    7.2634f,  7.8830f,  8.5260f,  9.1952f,  9.8929f,  10.6217f, 11.3841f,
-    12.1826f, 13.0199f, 13.8988f, 14.8220f, 15.7926f, 16.8139f, 17.8892f,
-    19.0222f, 20.2168f, 21.4771f, 22.8076f, 24.2130f, 25.6984f, 27.2693f,
-    28.9318f, 30.6921f, 32.5573f, 34.5347f, 36.6325f, 38.8595f, 41.2251f,
-    43.7396f, 46.4143f, 49.2614f, 52.2942f};
-#define SBBF512_LUT_SIZE 39
+static double sbbf_fpr(double bits_per_element) {
+  if (bits_per_element <= 0.0)
+    return 1.0;
+
+  double a = 512.0 / bits_per_element;
+  double exp_neg_a = exp(-a);
+  double poisson_pmf = exp_neg_a;
+  double p_miss = 63.0 / 64.0;
+  double fpr = 0.0;
+
+  for (int i = 0; i < 500; i++) {
+    if (i > 0)
+      poisson_pmf *= a / i;
+
+    double p_bit_set = 1.0 - pow(p_miss, i);
+    double f_inner = pow(p_bit_set, 8);
+    fpr += poisson_pmf * f_inner;
+
+    if (poisson_pmf < 1e-15 && i > a)
+      break;
+  }
+
+  return fpr;
+}
+
+static double sbbf_bits_for_fpr(double target_fpr) {
+  double lo = 0.5, hi = 300.0;
+
+  while (hi - lo > 1e-6) {
+    double mid = (lo + hi) / 2.0;
+    if (sbbf_fpr(mid) > target_fpr)
+      lo = mid;
+    else
+      hi = mid;
+  }
+
+  return (lo + hi) / 2.0;
+}
 
 static inline uint64_t mix64(uint64_t x) {
   x ^= x >> 33;
@@ -57,22 +87,7 @@ static uint64_t calculate_block_count(uint64_t capacity, double fp_rate) {
   if (capacity == 0)
     capacity = 1;
 
-  double x = -log2(fp_rate);
-
-  double bits_per_item;
-  if (x <= 1.0) {
-    bits_per_item = SBBF512_LUT[0];
-  } else if (x >= 20.0) {
-    double slope = (SBBF512_LUT[38] - SBBF512_LUT[37]) / 0.5;
-    bits_per_item = SBBF512_LUT[38] + slope * (x - 20.0);
-  } else {
-    int idx = (int)((x - 1.0) / 0.5);
-    if (idx >= SBBF512_LUT_SIZE - 1)
-      idx = SBBF512_LUT_SIZE - 2;
-    double t = (x - 1.0 - idx * 0.5) / 0.5;
-    bits_per_item = SBBF512_LUT[idx] * (1.0 - t) + SBBF512_LUT[idx + 1] * t;
-  }
-
+  double bits_per_item = sbbf_bits_for_fpr(fp_rate);
   if (bits_per_item < 8.0)
     bits_per_item = 8.0;
 

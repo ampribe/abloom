@@ -7,8 +7,7 @@
   - [1.2 Sizing the Bloom Filter](#12-sizing-the-bloom-filter)
 - [2 Design Comparison](#2-design-comparison)
   - [2.1 Memory Overhead](#21-memory-overhead)
-  - [2.2 LUT Table Accuracy](#22-lut-table-accuracy)
-  - [2.3 Hashing](#23-hashing)
+  - [2.2 Hashing](#22-hashing)
 - [3 Reproducing](#3-reproducing)
 
 ## 1 Split Block Bloom Filter (SBBF)
@@ -61,7 +60,6 @@ For SBBF-512 ($B=512$, $k=8$, $w=64$), the equation becomes
 $$\varepsilon = \sum_{i=0}^{\infty} P_{512/c}(i) \cdot \left(1 - \left(\frac{63}{64}\right)^i\right)^8$$
 
 No closed-form inverse exists. To find $c$ for a target $\varepsilon$, `abloom` uses Bisection search to find $c$ such that $\text{FPR}(c) = \varepsilon$.
-To avoid computing $c$ on each initialization, `abloom` precomputes $c$ for $x = \log_2(1/\varepsilon) \in [1, 20]$ and stores the values in a lookup table. When initializing a Bloom filter, $c$ is approximated using interpolation.
 
 ## 2 Design Comparison
 
@@ -133,33 +131,7 @@ The final table is provided for completeness. It compares the bits per element o
 |    0.00010% |   19.93 |    19.93 |    28.76 |     64.66 |     51.87 |
 
 
-### 2.2 LUT Table Accuracy
-
-The table below shows the accuracy of the look up table approach for approximating the required bits per element. For FPR ∈ [0.0001%, 50%] with a LUT size of 39, the maximum error is <0.2%. Although this error might be intolerable at low FPR, bits per element is overestimated at low FPR, so empirical FPR should not be higher than specified.
-
-
-
-|         FPR |  x=-log2 |    Exact c |      LUT c |      Error |
-|-------------|----------|------------|------------|------------|
-|         50% |    1.000 |     3.2304 |     3.2304 |   +0.0000% |
-|         20% |    2.322 |     4.7572 |     4.7569 |   -0.0059% |
-|         10% |    3.322 |     5.8792 |     5.8805 |   +0.0227% |
-|          5% |    4.322 |     7.0478 |     7.0500 |   +0.0313% |
-|          1% |    6.644 |    10.0993 |    10.1026 |   +0.0326% |
-|        0.5% |    7.644 |    11.6100 |    11.6139 |   +0.0329% |
-|        0.1% |    9.966 |    15.7246 |    15.7262 |   +0.0100% |
-|       0.05% |   10.966 |    17.8138 |    17.8156 |   +0.0101% |
-|       0.01% |   13.288 |    23.6068 |    23.6163 |   +0.0401% |
-|      0.001% |   16.610 |    34.9841 |    34.9947 |   +0.0303% |
-
-Dense Sampling (every 0.1 step):
-  Max Error:  0.1789%
-  Mean Error: 0.0275%
-  RMS Error:  0.0358%
-
-LUT size: 39 floats = 156 bytes
-
-### 2.3 Hashing
+### 2.2 Hashing
 Python's built in hash function does not provide a good distribution for small integers, where generally `hash(n) = n`. This can result in a much larger FPR, which is unacceptable since small integers are a common workload. For each hash value, `abloom` applies the MurmurHash3 finalizer to get a better distribution without the overhead of a full hash function. `test_fpr.py` verifies this approach.
 
 ```c
