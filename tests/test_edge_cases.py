@@ -167,3 +167,147 @@ class TestDuplicateAdditions:
 
         assert len(bf) == 6
         assert all(item in bf for item in set(items))
+
+
+class TestIncompatibleOperations:
+    """Tests for operations between incompatible filters."""
+
+    def test_or_different_capacity_raises(self):
+        """Union of filters with different capacity raises ValueError."""
+        bf1 = BloomFilter(1000, 0.01)
+        bf2 = BloomFilter(2000, 0.01)
+
+        with pytest.raises(ValueError):
+            bf1 | bf2
+
+    def test_or_different_fp_rate_raises(self):
+        """Union of filters with different fp_rate raises ValueError."""
+        bf1 = BloomFilter(1000, 0.01)
+        bf2 = BloomFilter(1000, 0.001)
+
+        with pytest.raises(ValueError):
+            bf1 | bf2
+
+    def test_ior_different_capacity_raises(self):
+        """In-place union with different capacity raises ValueError."""
+        bf1 = BloomFilter(1000, 0.01)
+        bf2 = BloomFilter(2000, 0.01)
+
+        with pytest.raises(ValueError):
+            bf1 |= bf2
+
+    def test_ior_different_fp_rate_raises(self):
+        """In-place union with different fp_rate raises ValueError."""
+        bf1 = BloomFilter(1000, 0.01)
+        bf2 = BloomFilter(1000, 0.001)
+
+        with pytest.raises(ValueError):
+            bf1 |= bf2
+
+    def test_or_with_non_bloom_filter_raises(self):
+        """Union with non-BloomFilter raises TypeError."""
+        bf = BloomFilter(1000, 0.01)
+
+        with pytest.raises(TypeError):
+            bf | "not a filter"
+
+        with pytest.raises(TypeError):
+            bf | 42
+
+        with pytest.raises(TypeError):
+            bf | [1, 2, 3]
+
+    def test_ior_with_non_bloom_filter_raises(self):
+        """In-place union with non-BloomFilter raises TypeError."""
+        bf = BloomFilter(1000, 0.01)
+
+        with pytest.raises(TypeError):
+            bf |= "not a filter"
+
+
+class TestCopyEdgeCases:
+    """Edge cases for copy()."""
+
+    def test_copy_large_filter(self):
+        """Copy works with large filters."""
+        bf = BloomFilter(1_000_000, 0.01)
+        bf.update(range(10000))
+
+        bf_copy = bf.copy()
+
+        assert len(bf_copy) == 10000
+        assert bf == bf_copy
+
+    def test_copy_minimal_filter(self):
+        """Copy works with minimal capacity filter."""
+        bf = BloomFilter(1, 0.5)
+        bf.add("item")
+
+        bf_copy = bf.copy()
+
+        assert bf_copy.capacity == 1
+        assert "item" in bf_copy
+
+
+class TestClearEdgeCases:
+    """Edge cases for clear()."""
+
+    def test_clear_large_filter(self):
+        """Clear works with large filters."""
+        bf = BloomFilter(1_000_000, 0.01)
+        bf.update(range(10000))
+
+        bf.clear()
+
+        assert len(bf) == 0
+        # Sample check that items are gone
+        assert 0 not in bf
+        assert 9999 not in bf
+
+    def test_clear_after_copy(self):
+        """Clearing original doesn't affect copy."""
+        bf = BloomFilter(1000, 0.01)
+        bf.update(["a", "b", "c"])
+
+        bf_copy = bf.copy()
+        bf.clear()
+
+        assert len(bf) == 0
+        assert len(bf_copy) == 3
+        assert "a" in bf_copy
+
+
+class TestEqualityEdgeCases:
+    """Edge cases for equality."""
+
+    def test_equality_large_filters(self):
+        """Equality works with large filters."""
+        bf1 = BloomFilter(100_000, 0.01)
+        bf2 = BloomFilter(100_000, 0.01)
+
+        items = list(range(10000))
+        bf1.update(items)
+        bf2.update(items)
+
+        assert bf1 == bf2
+
+    def test_near_boundary_fp_rates(self):
+        """Filters with edge fp_rates can be compared."""
+        bf1 = BloomFilter(1000, 0.0001)
+        bf2 = BloomFilter(1000, 0.0001)
+
+        bf1.add("item")
+        bf2.add("item")
+
+        assert bf1 == bf2
+
+    def test_inequality_single_bit_difference(self):
+        """Filters differing by one item are not equal."""
+        bf1 = BloomFilter(1000, 0.01)
+        bf2 = BloomFilter(1000, 0.01)
+
+        bf1.add("shared")
+        bf2.add("shared")
+        bf1.add("unique")
+
+        assert bf1 != bf2
