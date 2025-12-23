@@ -16,6 +16,17 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+# Static filters: immutable after construction, lookup-only, fixed FP rates
+STATIC_FILTERS = {"Xor8", "Fuse8", "Xor16", "Fuse16"}
+
+# Actual FP rates for static filters (they don't use the configurable fp_rate)
+STATIC_FILTER_FP_RATES = {
+    "Xor8": "~0.39%",
+    "Fuse8": "~0.39%",
+    "Xor16": "~0.0015%",
+    "Fuse16": "~0.0015%",
+}
+
 
 @dataclass
 class BenchmarkResult:
@@ -180,7 +191,7 @@ def calculate_speedup(target_ms: float, baseline_ms: float) -> tuple[float, str]
 
 
 def generate_summary_section(
-    results: list[BenchmarkResult], 
+    results: list[BenchmarkResult],
     libraries: list[str],
     baseline: str
 ) -> str:
@@ -188,21 +199,24 @@ def generate_summary_section(
     lines = ["## Summary", ""]
     lines.append("**Canonical benchmark: 1 million integers, 1% false positive rate**")
     lines.append("")
-    
+
+    # Exclude static filters from summary (they only support lookup)
+    summary_libs = [lib for lib in libraries if lib not in STATIC_FILTERS]
+
     # Find canonical results
     canonical = {}
     for r in results:
         if r.size == 1_000_000 and r.data_type == "int" and r.fp_rate == 0.01:
             key = (r.lib, r.workload)
             canonical[key] = r
-    
+
     # Determine which libraries get detailed output (baseline and abloom)
     detailed_libs = {baseline, "abloom"}
-    
+
     # Build header: Operation | lib1 | lib2 | ... | Speedup (vs baseline)
     header = "| Operation |"
     separator = "|-----------|"
-    for lib in libraries:
+    for lib in summary_libs:
         header += f" {lib} |"
         # Use wider separator for detailed columns
         if lib in detailed_libs:
@@ -211,16 +225,16 @@ def generate_summary_section(
             separator += "--------|"
     header += f" Speedup (vs {baseline}) |"
     separator += "---------|"
-    
+
     lines.append(header)
     lines.append(separator)
-    
+
     for workload in ["add", "lookup", "update"]:
         row = f"| {workload.capitalize()} |"
-        
+
         # Get time for each library
         lib_times = {}
-        for lib in libraries:
+        for lib in summary_libs:
             key = (lib, workload)
             if key in canonical:
                 r = canonical[key]
@@ -247,22 +261,28 @@ def generate_summary_section(
 
 
 def generate_detailed_table(
-    results: list[BenchmarkResult], 
+    results: list[BenchmarkResult],
     workload: str,
     libraries: list[str],
     baseline: str
 ) -> str:
     """Generate detailed table for a specific workload."""
     lines = [f"### {workload.capitalize()} Operations", ""]
-    
+
+    # Exclude static filters from add/update tables (they only support lookup)
+    if workload in ("add", "update"):
+        table_libs = [lib for lib in libraries if lib not in STATIC_FILTERS]
+    else:
+        table_libs = libraries
+
     # Filter results for this workload
     workload_results = [r for r in results if r.workload == workload]
-    
+
     if not workload_results:
         lines.append("_No results available._")
         lines.append("")
         return "\n".join(lines)
-    
+
     # Group by config
     configs = {}
     for r in workload_results:
@@ -270,14 +290,14 @@ def generate_detailed_table(
         if key not in configs:
             configs[key] = {}
         configs[key][r.lib] = r
-    
+
     # Determine which libraries get detailed output (baseline and abloom)
     detailed_libs = {baseline, "abloom"}
-    
+
     # Build dynamic header
     header = "| Data Type | Size | FP Rate |"
     separator = "|-----------|------|---------|"
-    for lib in libraries:
+    for lib in table_libs:
         header += f" {lib} |"
         # Use wider separator for detailed columns
         if lib in detailed_libs:
@@ -286,10 +306,10 @@ def generate_detailed_table(
             separator += "--------|"
     header += f" Speedup (vs {baseline}) |"
     separator += "---------|"
-    
+
     lines.append(header)
     lines.append(separator)
-    
+
     # Sort configs by data_type, then size, then fp_rate
     def sort_key(k: str):
         # Handle long_tuple which has underscore in name
@@ -300,21 +320,21 @@ def generate_detailed_table(
             parts = k.split("_")
             data_type_order = {"int": 0, "uuid": 1}.get(parts[0], 9)
             return (data_type_order, int(parts[1]), float(parts[2]))
-    
+
     for key in sorted(configs.keys(), key=sort_key):
         libs_data = configs[key]
-        
+
         # Get any result to extract config info
         sample = next(iter(libs_data.values()))
         data_type = sample.data_type
         size = format_size(sample.size)
         fp_rate = f"{sample.fp_rate:.1%}" if sample.fp_rate >= 0.01 else f"{sample.fp_rate:.2%}"
-        
+
         row = f"| {data_type} | {size} | {fp_rate} |"
-        
+
         # Add time for each library
         lib_times = {}
-        for lib in libraries:
+        for lib in table_libs:
             if lib in libs_data:
                 r = libs_data[lib]
                 lib_times[lib] = r.mean_ms
@@ -340,7 +360,7 @@ def generate_detailed_table(
 
 
 def generate_report(
-    results: list[BenchmarkResult], 
+    results: list[BenchmarkResult],
     metadata: dict,
     libraries: list[str],
     baseline: str,
@@ -348,7 +368,10 @@ def generate_report(
 ) -> str:
     """Generate the full benchmark report."""
     lines = []
-    
+
+    # Check if any static filters are present
+    static_filters_present = [lib for lib in libraries if lib in STATIC_FILTERS]
+
     # Header
     lines.append("# Benchmark Results")
     lines.append("")
@@ -366,7 +389,7 @@ def generate_report(
     lines.append(">")
     lines.append(f"> **Baseline for speedup:** {baseline}")
     lines.append("")
-    
+
     # Summary
     lines.append(generate_summary_section(results, libraries, baseline))
     
@@ -398,12 +421,27 @@ def generate_report(
     lines.append("```")
     lines.append("")
     
+    # Add footnote about static filters if any are present
+    if static_filters_present:
+        fp_notes = [f"{lib} ({STATIC_FILTER_FP_RATES[lib]})" for lib in static_filters_present]
+        footnote = (
+            f"**Note on Xor/Fuse filters:** "
+            f"{', '.join(static_filters_present)} are static filters from "
+            f"[pyfusefilter](https://github.com/FastFilter/pyfusefilter). "
+            f"Unlike Bloom filters, they are immutable after construction (no add/update) "
+            f"and have fixed false positive rates: {', '.join(fp_notes)}."
+        )
+        lines.append("---")
+        lines.append("")
+        lines.append(footnote)
+        lines.append("")
+
     # Link to benchmark guide
     lines.append("---")
     lines.append("")
     lines.append("For filtering options, benchmark settings, and test name patterns, see [docs/BENCHMARKING.md](docs/BENCHMARKING.md).")
     lines.append("")
-    
+
     return "\n".join(lines)
 
 

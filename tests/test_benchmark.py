@@ -8,6 +8,7 @@ from rbloom import Bloom as RBloomFilter
 from pybloom_live import BloomFilter as PyBloom
 from fastbloom_rs import BloomFilter as FastBloomFilter
 from pybloomfilter import BloomFilter as PyBloomFilterMmap
+import pyfusefilter
 
 # ============ CONFIGURATION ============
 
@@ -17,7 +18,14 @@ LIBRARIES = {
     "pybloom_live": PyBloom,
     "fastbloom_rs": FastBloomFilter,
     "pybloomfiltermmap": PyBloomFilterMmap,
+    "Xor8": pyfusefilter.Xor8,
+    "Fuse8": pyfusefilter.Fuse8,
+    "Xor16": pyfusefilter.Xor16,
+    "Fuse16": pyfusefilter.Fuse16,
 }
+
+# Static filters: constructed with data, only support lookup (no add/update)
+STATIC_FILTERS = {"Xor8", "Fuse8", "Xor16", "Fuse16"}
 
 @dataclass(frozen=True)
 class BenchConfig:
@@ -57,11 +65,11 @@ GENERATORS = {
 
 class AddWorkload:
     name = "add"
-    
-    def setup(self, bf_class, capacity, fp_rate, data):
+
+    def setup(self, bf_class, capacity, fp_rate, data, lib_name=None):
         """No setup needed for add - we create fresh filter each run."""
         return None
-    
+
     def run(self, bf_class, capacity, fp_rate, data, setup_result):
         bf = bf_class(capacity, fp_rate)
         for item in data:
@@ -70,24 +78,27 @@ class AddWorkload:
 
 class LookupWorkload:
     name = "lookup"
-    
-    def setup(self, bf_class, capacity, fp_rate, data):
+
+    def setup(self, bf_class, capacity, fp_rate, data, lib_name=None):
         """Pre-populate filter before benchmark."""
+        if lib_name in STATIC_FILTERS:
+            # Static filters are constructed with data directly
+            return bf_class(data)
         bf = bf_class(capacity, fp_rate)
         for item in data:
             bf.add(item)
         return bf
-    
+
     def run(self, bf_class, capacity, fp_rate, data, bf):
         return sum(1 for item in data if item in bf)
 
 class UpdateWorkload:
     name = "update"
-    
-    def setup(self, bf_class, capacity, fp_rate, data):
+
+    def setup(self, bf_class, capacity, fp_rate, data, lib_name=None):
         """No setup needed for update - we create fresh filter each run."""
         return None
-    
+
     def run(self, bf_class, capacity, fp_rate, data, setup_result):
         bf = bf_class(capacity, fp_rate)
         bf.update(data)
@@ -115,30 +126,38 @@ def get_benchmark_config(size):
 
 # ============ TESTS ============
 
-@pytest.mark.parametrize("config", CONFIGS, 
+@pytest.mark.parametrize("config", CONFIGS,
     ids=lambda c: f"{c.data_type}_{c.size}_{c.fp_rate}")
 @pytest.mark.parametrize("workload_name", WORKLOADS.keys())
 @pytest.mark.parametrize("lib_name", LIBRARIES.keys())
 def test_benchmark(benchmark, config, workload_name, lib_name):
     """Benchmark a single library/config/workload combination."""
     libs = get_active_libraries()
-    
+
     # Skip if library filtered out by BENCH_LIBS env var
     if lib_name not in libs:
         pytest.skip(f"Library {lib_name} not in active libraries")
-    
+
+    # Static filters only support lookup (no add/update)
+    if lib_name in STATIC_FILTERS and workload_name in ("add", "update"):
+        pytest.skip(f"{lib_name} doesn't support {workload_name}")
+
+    # Static filters ignore FP rate - only run for canonical 1% to avoid duplicates
+    if lib_name in STATIC_FILTERS and config.fp_rate != 0.01:
+        pytest.skip(f"{lib_name} has fixed FP rate, skipping non-canonical config")
+
     bf_class = libs[lib_name]
     workload = WORKLOADS[workload_name]
     data = GENERATORS[config.data_type](config.size, seed=42)
     bench_config = get_benchmark_config(config.size)
-    
+
     # Setup (e.g., pre-populate for lookup)
-    setup_result = workload.setup(bf_class, config.size, config.fp_rate, data)
-    
+    setup_result = workload.setup(bf_class, config.size, config.fp_rate, data, lib_name)
+
     # Create the benchmark function
     def bench_fn():
         return workload.run(bf_class, config.size, config.fp_rate, data, setup_result)
-    
+
     benchmark.pedantic(bench_fn, **bench_config)
 
 
@@ -151,13 +170,17 @@ BATCH_TOTAL_SIZE = 100_000
 @pytest.mark.parametrize("lib_name", LIBRARIES.keys())
 def test_update_batch_scaling(benchmark, batch_size, lib_name):
     """Measure update throughput at different batch sizes.
-    
+
     Tests how batch size affects performance when inserting the same
     total number of items (100K integers) using different batch sizes.
     """
     if batch_size > BATCH_TOTAL_SIZE:
         pytest.skip(f"Batch size {batch_size} exceeds total size {BATCH_TOTAL_SIZE}")
-    
+
+    # Static filters don't support update
+    if lib_name in STATIC_FILTERS:
+        pytest.skip(f"{lib_name} doesn't support update")
+
     libs = get_active_libraries()
     if lib_name not in libs:
         pytest.skip(f"Library {lib_name} not in active libraries")

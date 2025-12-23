@@ -1,16 +1,16 @@
 # Benchmark Results
 
-> Auto-generated from `benchmark_results.json`
+> Auto-generated from `results.json`
 >
-> **Run date:** 2025-12-20
+> **Run date:** 2025-12-23
 >
 > **CPU:** Apple M2
 >
 > **Python:** 3.13.7
 >
-> **Commit:** `6d547fb5` (main)
+> **Commit:** `0cbb2ed0` (main)
 >
-> **Libraries:** fastbloom_rs, pybloom_live, pybloomfiltermmap, rbloom, abloom
+> **Libraries:** Fuse16, Fuse8, Xor16, Xor8, fastbloom_rs, pybloom_live, pybloomfiltermmap, rbloom, abloom
 >
 > **Baseline for speedup:** rbloom
 
@@ -20,9 +20,9 @@
 
 | Operation | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | abloom | Speedup (vs rbloom) |
 |-----------|--------|--------|--------|--------------------------------|--------------------------------|---------|
-| Add | 94.3ms ± 0.5ms | 1.62s ± 0.04s | 115.3ms ± 0.3ms | 53.7ms ± 0.6ms (median: 53.4ms, 18.6M/s) | 18.6ms ± 0.3ms (median: 18.6ms, 53.9M/s) | **2.90x** |
-| Lookup | 143.2ms ± 1.8ms | 1.43s ± 0.03s | 88.3ms ± 0.1ms | 46.4ms ± 0.2ms (median: 46.3ms, 21.6M/s) | 39.3ms ± 3.8ms (median: 38.9ms, 25.5M/s) | **1.18x** |
-| Update | - | - | 112.2ms ± 0.3ms | 16.2ms ± 0.1ms (median: 16.1ms, 61.9M/s) | 6.7ms ± 0.1ms (median: 6.7ms, 150.3M/s) | **2.43x** |
+| Add | 84.1ms ± 0.3ms | 1.45s ± 0.01s | 112.2ms ± 0.3ms | 49.5ms ± 0.2ms (median: 49.5ms, 20.2M/s) | 16.1ms ± 0.9ms (median: 15.7ms, 62.3M/s) | **3.08x** |
+| Lookup | 122.1ms ± 0.1ms | 1.25s ± 0.02s | 92.2ms ± 2.6ms | 39.9ms ± 0.1ms (median: 39.9ms, 25.1M/s) | 30.1ms ± 0.2ms (median: 30.2ms, 33.3M/s) | **1.33x** |
+| Update | - | - | 110.5ms ± 0.3ms | 15.3ms ± 0.0ms (median: 15.3ms, 65.5M/s) | 6.4ms ± 0.0ms (median: 6.4ms, 157.5M/s) | **2.40x** |
 
 ## Detailed Results
 
@@ -30,34 +30,34 @@
 
 | Data Type | Size | FP Rate | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | abloom | Speedup (vs rbloom) |
 |-----------|------|---------|--------|--------|--------|--------------------------------|--------------------------------|---------|
-| int | 1M | 0.10% | 98.4ms ± 0.9ms | 2.12s ± 0.06s | 137.8ms ± 0.8ms | 58.3ms ± 0.3ms (median: 58.3ms, 17.1M/s) | 18.9ms ± 0.4ms (median: 18.7ms, 52.9M/s) | **3.08x** |
-| int | 1M | 1.0% | 94.3ms ± 0.5ms | 1.62s ± 0.04s | 115.3ms ± 0.3ms | 53.7ms ± 0.6ms (median: 53.4ms, 18.6M/s) | 18.6ms ± 0.3ms (median: 18.6ms, 53.9M/s) | **2.90x** |
-| int | 10M | 0.10% | 1.74s ± 0.43s | 21.51s ± 0.55s | 1.95s ± 0.48s | 802.2ms ± 9.5ms (median: 798.1ms, 12.5M/s) | 457.6ms ± 7.3ms (median: 457.1ms, 21.9M/s) | **1.75x** |
-| int | 10M | 1.0% | 1.03s ± 0.02s | 16.79s ± 0.44s | 1.22s ± 0.03s | 583.4ms ± 8.1ms (median: 586.5ms, 17.1M/s) | 330.3ms ± 27.5ms (median: 341.1ms, 30.3M/s) | **1.77x** |
-| uuid | 1M | 0.10% | 138.4ms ± 0.2ms | 1.93s ± 0.01s | 187.2ms ± 0.1ms | 57.9ms ± 1.0ms (median: 58.1ms, 17.3M/s) | 18.5ms ± 0.1ms (median: 18.5ms, 54.0M/s) | **3.13x** |
-| uuid | 1M | 1.0% | 135.6ms ± 0.8ms | 1.53s ± 0.02s | 158.9ms ± 2.4ms | 51.5ms ± 0.1ms (median: 51.6ms, 19.4M/s) | 18.7ms ± 0.1ms (median: 18.7ms, 53.6M/s) | **2.76x** |
+| int | 1M | 0.10% | 87.2ms ± 0.4ms | 1.86s ± 0.01s | 134.6ms ± 0.5ms | 55.1ms ± 0.1ms (median: 55.1ms, 18.2M/s) | 16.2ms ± 0.7ms (median: 15.9ms, 61.6M/s) | **3.39x** |
+| int | 1M | 1.0% | 84.1ms ± 0.3ms | 1.45s ± 0.01s | 112.2ms ± 0.3ms | 49.5ms ± 0.2ms (median: 49.5ms, 20.2M/s) | 16.1ms ± 0.9ms (median: 15.7ms, 62.3M/s) | **3.08x** |
+| int | 10M | 0.10% | 1.10s ± 0.01s | 19.02s ± 0.06s | 1.63s ± 0.01s | 754.5ms ± 1.4ms (median: 754.1ms, 13.3M/s) | 417.0ms ± 5.3ms (median: 414.9ms, 24.0M/s) | **1.81x** |
+| int | 10M | 1.0% | 903.9ms ± 4.2ms | 14.50s ± 0.11s | 1.16s ± 0.00s | 547.9ms ± 5.6ms (median: 549.9ms, 18.3M/s) | 195.0ms ± 6.5ms (median: 196.6ms, 51.3M/s) | **2.81x** |
+| uuid | 1M | 0.10% | 124.8ms ± 0.2ms | 1.79s ± 0.02s | 189.5ms ± 0.9ms | 53.4ms ± 0.1ms (median: 53.4ms, 18.7M/s) | 15.6ms ± 0.1ms (median: 15.6ms, 64.1M/s) | **3.42x** |
+| uuid | 1M | 1.0% | 122.7ms ± 0.4ms | 1.40s ± 0.01s | 156.7ms ± 1.1ms | 48.2ms ± 0.0ms (median: 48.2ms, 20.8M/s) | 15.4ms ± 0.1ms (median: 15.4ms, 64.8M/s) | **3.12x** |
 
 ### Lookup Operations
 
-| Data Type | Size | FP Rate | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | abloom | Speedup (vs rbloom) |
-|-----------|------|---------|--------|--------|--------|--------------------------------|--------------------------------|---------|
-| int | 1M | 0.10% | 146.1ms ± 0.1ms | 1.86s ± 0.00s | 113.7ms ± 4.4ms | 52.0ms ± 0.2ms (median: 52.0ms, 19.2M/s) | 35.7ms ± 0.6ms (median: 35.8ms, 28.0M/s) | **1.46x** |
-| int | 1M | 1.0% | 143.2ms ± 1.8ms | 1.43s ± 0.03s | 88.3ms ± 0.1ms | 46.4ms ± 0.2ms (median: 46.3ms, 21.6M/s) | 39.3ms ± 3.8ms (median: 38.9ms, 25.5M/s) | **1.18x** |
-| int | 10M | 0.10% | 1.77s ± 0.05s | 19.26s ± 0.29s | 1.44s ± 0.09s | 706.1ms ± 6.8ms (median: 709.5ms, 14.2M/s) | 797.8ms ± 46.0ms (median: 821.2ms, 12.5M/s) | _0.88x_ |
-| int | 10M | 1.0% | 1.51s ± 0.00s | 14.34s ± 0.13s | 963.7ms ± 8.4ms | 508.0ms ± 0.9ms (median: 507.5ms, 19.7M/s) | 428.7ms ± 11.8ms (median: 431.6ms, 23.3M/s) | **1.18x** |
-| uuid | 1M | 0.10% | 185.4ms ± 0.4ms | 1.79s ± 0.04s | 160.6ms ± 0.7ms | 50.1ms ± 0.2ms (median: 50.1ms, 20.0M/s) | 43.2ms ± 1.2ms (median: 43.8ms, 23.1M/s) | **1.16x** |
-| uuid | 1M | 1.0% | 189.2ms ± 1.6ms | 1.45s ± 0.15s | 143.5ms ± 33.1ms | 44.2ms ± 0.1ms (median: 44.2ms, 22.6M/s) | 42.4ms ± 1.3ms (median: 43.0ms, 23.6M/s) | **1.04x** |
+| Data Type | Size | FP Rate | Fuse16 | Fuse8 | Xor16 | Xor8 | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | abloom | Speedup (vs rbloom) |
+|-----------|------|---------|--------|--------|--------|--------|--------|--------|--------|--------------------------------|--------------------------------|---------|
+| int | 1M | 0.10% | - | - | - | - | 125.4ms ± 0.6ms | 1.65s ± 0.01s | 104.2ms ± 1.9ms | 45.7ms ± 0.1ms (median: 45.7ms, 21.9M/s) | 30.5ms ± 0.4ms (median: 30.5ms, 32.8M/s) | **1.50x** |
+| int | 1M | 1.0% | 337.8ms ± 2.7ms | 333.0ms ± 2.3ms | 326.0ms ± 3.1ms | 323.6ms ± 2.7ms | 122.1ms ± 0.1ms | 1.25s ± 0.02s | 92.2ms ± 2.6ms | 39.9ms ± 0.1ms (median: 39.9ms, 25.1M/s) | 30.1ms ± 0.2ms (median: 30.2ms, 33.3M/s) | **1.33x** |
+| int | 10M | 0.10% | - | - | - | - | 1.49s ± 0.01s | 17.19s ± 0.28s | 1.32s ± 0.01s | 743.0ms ± 132.7ms (median: 680.6ms, 13.5M/s) | 707.0ms ± 2.0ms (median: 706.9ms, 14.1M/s) | **1.05x** |
+| int | 10M | 1.0% | 4.06s ± 0.52s | 3.42s ± 0.07s | 4.13s ± 0.43s | 3.33s ± 0.07s | 1.29s ± 0.04s | 12.81s ± 0.17s | 893.4ms ± 24.0ms | 447.7ms ± 6.8ms (median: 449.6ms, 22.3M/s) | 356.3ms ± 2.8ms (median: 355.4ms, 28.1M/s) | **1.26x** |
+| uuid | 1M | 0.10% | - | - | - | - | 161.2ms ± 0.2ms | 1.56s ± 0.00s | 157.6ms ± 0.2ms | 43.8ms ± 0.3ms (median: 43.7ms, 22.8M/s) | 28.3ms ± 0.1ms (median: 28.3ms, 35.3M/s) | **1.55x** |
+| uuid | 1M | 1.0% | 308.5ms ± 1.2ms | 311.0ms ± 3.1ms | 315.3ms ± 9.5ms | 308.8ms ± 0.3ms | 158.8ms ± 0.3ms | 1.23s ± 0.01s | 126.0ms ± 0.3ms | 38.6ms ± 0.6ms (median: 38.4ms, 25.9M/s) | 28.4ms ± 0.0ms (median: 28.4ms, 35.2M/s) | **1.36x** |
 
 ### Update Operations
 
 | Data Type | Size | FP Rate | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | abloom | Speedup (vs rbloom) |
 |-----------|------|---------|--------|--------|--------|--------------------------------|--------------------------------|---------|
-| int | 1M | 0.10% | - | - | 132.7ms ± 0.2ms | 24.5ms ± 1.0ms (median: 24.2ms, 40.8M/s) | 6.7ms ± 0.1ms (median: 6.7ms, 150.2M/s) | **3.68x** |
-| int | 1M | 1.0% | - | - | 112.2ms ± 0.3ms | 16.2ms ± 0.1ms (median: 16.1ms, 61.9M/s) | 6.7ms ± 0.1ms (median: 6.7ms, 150.3M/s) | **2.43x** |
-| int | 10M | 0.10% | - | - | 1.81s ± 0.10s | 459.6ms ± 187.7ms (median: 352.5ms, 21.8M/s) | 231.2ms ± 3.5ms (median: 229.9ms, 43.3M/s) | **1.99x** |
-| int | 10M | 1.0% | - | - | 1.16s ± 0.00s | 187.2ms ± 4.2ms (median: 186.6ms, 53.4M/s) | 96.5ms ± 4.4ms (median: 98.3ms, 103.6M/s) | **1.94x** |
-| uuid | 1M | 0.10% | - | - | 185.0ms ± 0.7ms | 21.7ms ± 0.1ms (median: 21.7ms, 46.1M/s) | 6.6ms ± 0.1ms (median: 6.6ms, 150.7M/s) | **3.27x** |
-| uuid | 1M | 1.0% | - | - | 160.9ms ± 17.3ms | 15.4ms ± 0.1ms (median: 15.3ms, 65.1M/s) | 6.5ms ± 0.1ms (median: 6.5ms, 153.4M/s) | **2.36x** |
+| int | 1M | 0.10% | - | - | 131.8ms ± 0.3ms | 22.7ms ± 0.2ms (median: 22.6ms, 44.1M/s) | 6.3ms ± 0.1ms (median: 6.3ms, 158.1M/s) | **3.58x** |
+| int | 1M | 1.0% | - | - | 110.5ms ± 0.3ms | 15.3ms ± 0.0ms (median: 15.3ms, 65.5M/s) | 6.4ms ± 0.0ms (median: 6.4ms, 157.5M/s) | **2.40x** |
+| int | 10M | 0.10% | - | - | 1.57s ± 0.02s | 315.7ms ± 5.4ms (median: 314.7ms, 31.7M/s) | 212.4ms ± 2.7ms (median: 211.9ms, 47.1M/s) | **1.49x** |
+| int | 10M | 1.0% | - | - | 1.15s ± 0.01s | 174.4ms ± 5.6ms (median: 172.3ms, 57.3M/s) | 93.9ms ± 7.1ms (median: 93.0ms, 106.5M/s) | **1.86x** |
+| uuid | 1M | 0.10% | - | - | 188.1ms ± 0.3ms | 20.5ms ± 0.1ms (median: 20.5ms, 48.9M/s) | 6.6ms ± 0.1ms (median: 6.6ms, 151.5M/s) | **3.10x** |
+| uuid | 1M | 1.0% | - | - | 155.3ms ± 1.9ms | 14.7ms ± 0.0ms (median: 14.7ms, 67.8M/s) | 6.3ms ± 0.1ms (median: 6.3ms, 158.2M/s) | **2.33x** |
 
 ## Reproducing These Results
 
@@ -75,6 +75,10 @@ python scripts/generate_benchmark_report.py results.json
 # Run just the canonical benchmark (1M ints, 1% FPR)
 uv run pytest tests/test_benchmark.py -k "int_1000000_0.01" --benchmark-only -v
 ```
+
+---
+
+**Note on Xor/Fuse filters:** Fuse16, Fuse8, Xor16, Xor8 are static filters from [pyfusefilter](https://github.com/FastFilter/pyfusefilter). Unlike Bloom filters, they are immutable after construction (no add/update) and have fixed false positive rates: Fuse16 (~0.0015%), Fuse8 (~0.39%), Xor16 (~0.0015%), Xor8 (~0.39%).
 
 ---
 
