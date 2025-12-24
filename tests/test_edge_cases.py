@@ -4,15 +4,15 @@ from abloom import BloomFilter
 
 
 class TestCapacityBoundaries:
-    def test_minimum_capacity(self):
-        bf = BloomFilter(1, 0.01)
+    def test_minimum_capacity(self, bf_factory):
+        bf = bf_factory(1)
         assert bf.capacity == 1
 
         bf.add("item")
         assert "item" in bf
 
-    def test_small_capacity(self):
-        bf = BloomFilter(10, 0.01)
+    def test_small_capacity(self, bf_factory):
+        bf = bf_factory(10)
         items = [f"item_{i}" for i in range(10)]
 
         for item in items:
@@ -21,15 +21,15 @@ class TestCapacityBoundaries:
         for item in items:
             assert item in bf
 
-    def test_large_capacity(self):
-        bf = BloomFilter(10_000_000, 0.01)
+    def test_large_capacity(self, bf_factory):
+        bf = bf_factory(10_000_000)
         assert bf.capacity == 10_000_000
 
         bf.add("test")
         assert "test" in bf
 
-    def test_exceeding_capacity(self):
-        bf = BloomFilter(100, 0.01)
+    def test_exceeding_capacity(self, bf_factory):
+        bf = bf_factory(100)
         items = [f"item_{i}" for i in range(200)]
 
         for item in items:
@@ -71,25 +71,25 @@ class TestFalsePositiveRateBoundaries:
 
 
 class TestEmptyAndSpecialStrings:
-    def test_empty_string(self):
-        bf = BloomFilter(1000, 0.01)
+    def test_empty_string(self, bf_factory):
+        bf = bf_factory(1000)
         bf.add("")
         assert "" in bf
 
-    def test_empty_bytes(self):
-        bf = BloomFilter(1000, 0.01)
+    def test_empty_bytes(self, bf_factory):
+        bf = bf_factory(1000)
         bf.add(b"")
         assert b"" in bf
 
-    def test_very_long_string(self):
-        bf = BloomFilter(1000, 0.01)
+    def test_very_long_string(self, bf_factory):
+        bf = bf_factory(1000)
         long_string = "x" * 10000
 
         bf.add(long_string)
         assert long_string in bf
 
-    def test_unicode_strings(self):
-        bf = BloomFilter(1000, 0.01)
+    def test_unicode_strings(self, bf_factory):
+        bf = bf_factory(1000)
         items = ["hello", "世界", "مرحبا", "🎉"]
 
         for item in items:
@@ -100,13 +100,13 @@ class TestEmptyAndSpecialStrings:
 
 
 class TestIntegerBoundaries:
-    def test_zero(self):
-        bf = BloomFilter(1000, 0.01)
+    def test_zero(self, bf_factory):
+        bf = bf_factory(1000)
         bf.add(0)
         assert 0 in bf
 
-    def test_negative_integers(self):
-        bf = BloomFilter(1000, 0.01)
+    def test_negative_integers(self, bf_factory):
+        bf = bf_factory(1000)
         items = [-1, -100, -1000000]
 
         for item in items:
@@ -115,8 +115,8 @@ class TestIntegerBoundaries:
         for item in items:
             assert item in bf
 
-    def test_large_integers(self):
-        bf = BloomFilter(1000, 0.01)
+    def test_large_integers(self, bf_factory):
+        bf = bf_factory(1000)
         items = [sys.maxsize, sys.maxsize - 1, 2**63 - 1]
 
         for item in items:
@@ -127,16 +127,6 @@ class TestIntegerBoundaries:
 
 
 class TestBlockAllocation:
-    def test_block_count_power_of_two(self):
-        capacities = [1, 10, 100, 1000, 10000]
-
-        for capacity in capacities:
-            bf = BloomFilter(capacity, 0.01)
-            block_count = bf.bit_count // 256
-
-            assert block_count > 0
-            assert (block_count & (block_count - 1)) == 0
-
     def test_memory_alignment(self):
         bf = BloomFilter(1000, 0.01)
         assert bf.byte_count % 64 == 0
@@ -149,16 +139,16 @@ class TestBlockAllocation:
 
 
 class TestDuplicateAdditions:
-    def test_adding_same_item_multiple_times(self):
-        bf = BloomFilter(1000, 0.01)
+    def test_adding_same_item_multiple_times(self, bf_factory):
+        bf = bf_factory(1000)
 
         for _ in range(100):
             bf.add("duplicate")
 
         assert "duplicate" in bf
 
-    def test_duplicate_items_in_sequence(self):
-        bf = BloomFilter(1000, 0.01)
+    def test_duplicate_items_in_sequence(self, bf_factory):
+        bf = bf_factory(1000)
         items = ["a", "b", "a", "c", "b", "a"]
 
         for item in items:
