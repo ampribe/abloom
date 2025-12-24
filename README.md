@@ -61,11 +61,6 @@ if word in spam_filter:
     flag_as_potential_spam()
 ```
 
-## Limitations
-`abloom` relies on Python's built-in hash function, so types must implement `__hash__`. Python uses a unique seed for hashes within each process, so transferring Bloom filters between processes is not possible.
-
-`abloom`'s optimizations require ~1.5-2x memory overhead compared to the standard implementation, which can reduce performance for extremely large workloads (high capacity, low FPR), though `abloom` is still faster than alternatives. See [implementation](https://github.com/ampribe/abloom/blob/main/docs/IMPLEMENTATION.md#21-memory-overhead) for more details. 
-
 ## Development
 ### Testing
 
