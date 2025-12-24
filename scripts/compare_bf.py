@@ -104,23 +104,23 @@ def compare(fpr_values: list = None):
             0.00005, 0.00001,
             0.000005, 0.000001
         ]
-    
+
     print("=" * 90)
     print("Bloom Filter Comparison: Bits per Element")
     print("=" * 90)
     print()
     print(f"{'FPR':>12} | {'x=-log2':>7} | {'Theory':>8} | {'Std BF':>8} | {'SBBF-256':>9} | {'SBBF-512':>9}")
     print("-" * 90)
-    
+
     for fpr in fpr_values:
         x = -math.log2(fpr)
         theory = theoretical_min(fpr)
         sbf = sbf_bits_per_element(fpr)
         s256 = sbbf256_bits(fpr)
         s512 = sbbf512_bits(fpr)
-        
+
         print(f"{fpr*100:>11.5f}% | {x:>7.2f} | {theory:>8.2f} | {sbf:>8.2f} | {s256:>9.2f} | {s512:>9.2f}")
-    
+
     print()
     print("=" * 90)
     print("Overhead vs Information-Theoretic Minimum")
@@ -128,25 +128,25 @@ def compare(fpr_values: list = None):
     print()
     print(f"{'FPR':>12} | {'Std BF':>10} | {'SBBF-256':>10} | {'SBBF-512':>10}")
     print("-" * 50)
-    
+
     for fpr in fpr_values:
         theory = theoretical_min(fpr)
         sbf = sbf_bits_per_element(fpr)
         s256 = sbbf256_bits(fpr)
         s512 = sbbf512_bits(fpr)
-        
+
         sbf_oh = (sbf / theory - 1) * 100
         s256_oh = (s256 / theory - 1) * 100
         s512_oh = (s512 / theory - 1) * 100
-        
+
         print(f"{fpr*100:>11.5f}% | {sbf_oh:>+9.1f}% | {s256_oh:>+9.1f}% | {s512_oh:>+9.1f}%")
-    
+
     print()
     print("=" * 90)
     print("SBBF Overhead vs Standard Bloom Filter")
     print("=" * 90)
     print()
-    
+
     numerical, analytical = power_of_2_overhead_multiplier()
     pow2_overhead_pct = (analytical - 1) * 100
     print(f"Power-of-2 rounding overhead:")
@@ -155,18 +155,95 @@ def compare(fpr_values: list = None):
     print()
     print(f"{'FPR':>12} | {'SBBF-256':>12} | {'SBBF-512':>12} | {'SBBF-512+pow2':>14}")
     print("-" * 60)
-    
+
     for fpr in fpr_values:
         sbf = sbf_bits_per_element(fpr)
         s256 = sbbf256_bits(fpr)
         s512 = sbbf512_bits(fpr)
-        
+
         s256_vs_sbf = (s256 / sbf - 1) * 100
         s512_vs_sbf = (s512 / sbf - 1) * 100
         s512_pow2_vs_sbf = (s512 * analytical / sbf - 1) * 100
-        
+
         print(f"{fpr*100:>11.5f}% | {s256_vs_sbf:>+11.1f}% | {s512_vs_sbf:>+11.1f}% | {s512_pow2_vs_sbf:>+13.1f}%")
 
 
+def generate_markdown_tables(fpr_values: list = None):
+    """Generate markdown tables for IMPLEMENTATION.md"""
+    if fpr_values is None:
+        # Use only the FPRs shown in IMPLEMENTATION.md
+        fpr_values = [0.10, 0.01, 0.001, 0.0001, 0.00001]
+
+    numerical, analytical = power_of_2_overhead_multiplier()
+
+    # Table 1: Bits per element comparison with both SBBF-512 and SBBF-512+pow2 vs Std BF
+    print("Table 1: Bits per Element Comparison")
+    print("```")
+    print("    FPR |   Std BF |  SBBF-512 | SBBF-512 vs Std | SBBF-512+pow2 | vs Std BF")
+    print("-" * 85)
+
+    for fpr in fpr_values:
+        sbf = sbf_bits_per_element(fpr)
+        s512 = sbbf512_bits(fpr)
+        s512_pow2 = s512 * analytical
+
+        s512_vs_sbf = (s512 / sbf - 1) * 100
+        s512_pow2_vs_sbf = (s512_pow2 / sbf - 1) * 100
+
+        print(f"{fpr*100:>6.3f}% | {sbf:>8.2f} | {s512:>9.2f} | {s512_vs_sbf:>+14.1f}% | {s512_pow2:>13.2f} | {s512_pow2_vs_sbf:>+8.1f}%")
+
+    print("```")
+    print()
+
+    # Table 2: Overhead comparison (already exists in IMPLEMENTATION.md, regenerate for consistency)
+    print("Table 2: SBBF Overhead vs Standard Bloom Filter")
+    print()
+    print("|         FPR |     SBBF-256 |     SBBF-512 |  SBBF-512+pow2 |")
+    print("|-------------|--------------|--------------|----------------|")
+
+    # Extended FPR list for this table
+    extended_fprs = [
+        0.50, 0.40, 0.30, 0.20, 0.10,
+        0.05, 0.01, 0.005, 0.001,
+        0.0005, 0.0001, 0.00005, 0.00001
+    ]
+
+    for fpr in extended_fprs:
+        sbf = sbf_bits_per_element(fpr)
+        s256 = sbbf256_bits(fpr)
+        s512 = sbbf512_bits(fpr)
+
+        s256_vs_sbf = (s256 / sbf - 1) * 100
+        s512_vs_sbf = (s512 / sbf - 1) * 100
+        s512_pow2_vs_sbf = (s512 * analytical / sbf - 1) * 100
+
+        print(f"|   {fpr*100:>8.5f}% | {s256_vs_sbf:>+11.1f}% | {s512_vs_sbf:>+11.1f}% | {s512_pow2_vs_sbf:>+13.1f}% |")
+
+    print()
+
+    # Table 3: Complete bits per element comparison (with SBBF-512+pow2 added)
+    print("Table 3: Complete Bits per Element Comparison")
+    print()
+    print("|         FPR | x=-log2 |   Theory |   Std BF |  SBBF-256 |  SBBF-512 | SBBF-512+pow2 |")
+    print("|-------------|---------|----------|----------|-----------|-----------|---------------|")
+
+    for fpr in extended_fprs:
+        x = -math.log2(fpr)
+        theory = theoretical_min(fpr)
+        sbf = sbf_bits_per_element(fpr)
+        s256 = sbbf256_bits(fpr)
+        s512 = sbbf512_bits(fpr)
+        s512_pow2 = s512 * analytical
+
+        print(f"|   {fpr*100:>8.5f}% | {x:>7.2f} | {theory:>8.2f} | {sbf:>8.2f} | {s256:>9.2f} | {s512:>9.2f} | {s512_pow2:>13.2f} |")
+
+    print()
+
+
 if __name__ == "__main__":
-    compare()
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--markdown":
+        generate_markdown_tables()
+    else:
+        compare()

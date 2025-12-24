@@ -4,10 +4,12 @@
 ## Table of Contents
 - [1 Split Block Bloom Filter (SBBF)](#1-split-block-bloom-filter-sbbf)
   - [1.1 Structure](#11-structure)
-  - [1.2 Sizing the Bloom Filter](#12-sizing-the-bloom-filter)
+  - [1.2 Optimizations](#12-optimizations)
+  - [1.3 Sizing the Bloom Filter](#13-sizing-the-bloom-filter)
 - [2 Design Comparison](#2-design-comparison)
   - [2.1 Memory Overhead](#21-memory-overhead)
-  - [2.2 Hashing](#22-hashing)
+  - [2.2 Memory Overhead Derivation](#22-memory-overhead-derivation)
+  - [2.3 Hashing](#23-hashing)
 - [3 Reproducing](#3-reproducing)
 
 ## 1 Split Block Bloom Filter (SBBF)
@@ -34,11 +36,14 @@ The most common variant is SBBF-256 (256 bit blocks). `abloom` uses SBBF-512 (51
 | **SBBF-256** | 256 bits | 8 | 32 bits |
 | **SBBF-512** | 512 bits | 8 | 64 bits |
 
-`abloom` implements two optimizations from the Parquet implementation.
-1. Round block count to a power of 2. Setting block count to a power of 2 simplifies block selection. The block index can be computed from the upper 32 bits of the 64-bit hash using a bitwise `&`: `i = (h >> 32) & (block_count - 1)`. This is less expensive than using modulo.
-2. Use 8 pre-computed salts to generate the 8 randomly distributed indices in the range `0-63`. These salts are taken from the Parquet specification and provide a good distribution over the range. Rather than computing 8 expensive hash functions, index can be computed as `index = (hash_low * salt) >> 26`. `salts: 0x47b6137b, 0x44974d91, 0x8824ad5b, 0xa2b7289d, 0x705495c7, 0x2df1424b, 0x9efc4947, 0x5c6bfb31`
+### 1.2 Optimizations
+`abloom` uses 8 pre-computed salts to generate the 8 randomly distributed indices in the range `0-63`. These salts are taken from the Parquet specification and provide a good distribution over the range. Rather than computing 8 expensive hash functions, index can be computed as `index = (hash_low * salt) >> 26`. `salts: 0x47b6137b, 0x44974d91, 0x8824ad5b, 0xa2b7289d, 0x705495c7, 0x2df1424b, 0x9efc4947, 0x5c6bfb31`
 
-### 1.2 Sizing the Bloom Filter
+Another optimization Parquet implements is rounding block count to a power of 2. Setting block count to a power of 2 simplifies block selection. The block index can be computed from the upper 32 bits of the 64-bit hash using a bitwise `&`: `i = (h >> 32) & (block_count - 1)`. This is less expensive than using modulo.
+
+However, rounding block count increases memory usage by ~38% (see [2.2 Memory Overhead Derivation](#22-memory-overhead-derivation)). On my laptop, using modulo is ~40% faster on the 10M integers, 0.1% FPR benchmark. With rounding, the bloom filter does not fit in memory, increasing the number of expensive page faults. Since the canonical benchmark is only 5-10% slower with modulo, I decided to just use modulo to make memory usage and performance more consistent across workloads. For more details about memory usage, see [2.1 Memory Overhead](#21-memory-overhead).
+
+### 1.3 Sizing the Bloom Filter
 The Bloom filter implementation must compute the required filter size from the desired capacity and false positive rate, $\varepsilon$. This can be measured in blocks per element, $c$.
 For a standard Bloom filter with FPR $\varepsilon$, the required bits per element (see [here](https://en.wikipedia.org/wiki/Bloom_filter)) is:
 
@@ -65,31 +70,21 @@ No closed-form inverse exists. To find $c$ for a target $\varepsilon$, `abloom` 
 
 ### 2.1 Memory Overhead
 
-To estimate memory overhead, we will compute the bits per element, $c$, required for common false positive rates ($\varepsilon$). For a standard Bloom filter, $c \approx 1.4427 \log_2(1/\varepsilon)$.
+The table below shows bits per element for the standard Bloom filter, SBBF-512, and SBBF-512 with pow2 rounding on common FPR values.
 
-For SBBF, we can use the bisection search approach specified above to approximate $c$ given FPR. But we still need to account for `abloom`'s pow2 rounding. 
+|     FPR |  Std BF | SBBF-512 | SBBF-512 vs Std | SBBF-512+pow2 | vs Std BF |
+|---------|---------|----------|-----------------|---------------|-----------|
+| 10.000% |    4.79 |     5.88 |          +22.7% |          8.15 |    +70.1% |
+|  1.000% |    9.59 |    10.10 |           +5.4% |         14.00 |    +46.1% |
+|  0.100% |   14.38 |    15.72 |           +9.4% |         21.80 |    +51.6% |
+|  0.010% |   19.17 |    23.61 |          +23.1% |         32.73 |    +70.7% |
+|  0.001% |   23.96 |    34.98 |          +46.0% |         48.50 |   +102.4% |
 
-For $n \in [2^k, 2^{k+1})$, the block count is rounded up to $2^{k+1}$. The multiplicative overhead is $2^{k+1}/n$: We allocate $2^{k+1}$ blocks but only needed $n$.
 
-To compute the expected overhead, assume $n$ is uniformly distributed. Using the substitution $x = n / 2^k$, we have $x \in [1, 2)$ and the overhead becomes $2/x$. The expected overhead is:
+`abloom` implements an SBBF-512 architecture without pow2 rounding. Memory usage is within 10% of a standard Bloom filter for common FPRs.
 
-$$\mathbb{E}\left[\frac{2}{x}\right] = \int_1^2 \frac{2}{x} dx = 2 \ln 2 \approx 1.386$$
 
-The table below shows bits per element for the standard Bloom filter, SBBF-512, and SBBF-512 with pow2 rounding (`abloom`'s implementation) on common FPR values. 
-
-```
-    FPR |   Std BF |  SBBF-512 | SBBF-512+pow2 | vs Std BF
----------------------------------------------------------------
-10.000% |     4.79 |      5.88 |          8.15 |    +70.1%
- 1.000% |     9.59 |     10.10 |         14.00 |    +46.0%
- 0.100% |    14.38 |     15.72 |         21.79 |    +51.5%
- 0.010% |    19.17 |     23.61 |         32.72 |    +70.7%
- 0.001% |    23.96 |     34.98 |         48.49 |   +102.4%
-```
-
-For standard FPRs, `abloom` has ~1.5-2x memory overhead compared to a standard Bloom filter implementation. This can reduce performance for extremely high capacities or low false positive rates since the filter will not fit within cache and accesses will incur more expensive memory accesses. You can see this effect in the benchmark results for 10M ints, 0.1% FPR, though `abloom` is still faster than alternative libraries.
-
-The table below shows the additional memory overhead required for each SBBF implementation. For standard FPR values, SBBF without pow2 rounding is within 20% of the standard implementation's memory usage. Most of `abloom`'s memory overhead comes from pow2 rounding. One possible approach to improve memory efficiency is to remove the pow2 rounding (TBD depending on performance).
+The table below shows the memory overhead of various SBBF implementations compared to the standard Bloom filter for various FPRs. SBBF-512 marginally improves memory efficiency compared to SBBF-256.
 
 |         FPR |     SBBF-256 |     SBBF-512 |  SBBF-512+pow2 |
 |-------------|--------------|--------------|----------------|
@@ -106,32 +101,42 @@ The table below shows the additional memory overhead required for each SBBF impl
 |    0.01000% |       +37.4% |       +23.1% |         +70.7% |
 |    0.00500% |       +45.9% |       +29.0% |         +78.8% |
 |    0.00100% |       +71.0% |       +46.0% |        +102.4% |
-|    0.00050% |       +84.7% |       +55.0% |        +114.8% |
-|    0.00010% |      +124.9% |       +80.4% |        +150.1% |
 
 
 The final table is provided for completeness. It compares the bits per element of the standard Bloom filter to SBBF.
 
-|         FPR | x=-log2 |   Theory |   Std BF |  SBBF-256 |  SBBF-512 |
-|-------------|---------|----------|----------|-----------|----------|
-|   50.00000% |    1.00 |     1.00 |     1.44 |      3.25 |      3.23 |
-|   40.00000% |    1.32 |     1.32 |     1.91 |      3.65 |      3.62 |
-|   30.00000% |    1.74 |     1.74 |     2.51 |      4.14 |      4.10 |
-|   20.00000% |    2.32 |     2.32 |     3.35 |      4.82 |      4.76 |
-|   10.00000% |    3.32 |     3.32 |     4.79 |      5.99 |      5.88 |
-|    5.00000% |    4.32 |     4.32 |     6.24 |      7.23 |      7.05 |
-|    1.00000% |    6.64 |     6.64 |     9.59 |     10.53 |     10.10 |
-|    0.50000% |    7.64 |     7.64 |    11.03 |     12.20 |     11.61 |
-|    0.10000% |    9.97 |     9.97 |    14.38 |     16.89 |     15.72 |
-|    0.05000% |   10.97 |    10.97 |    15.82 |     19.34 |     17.81 |
-|    0.01000% |   13.29 |    13.29 |    19.17 |     26.34 |     23.61 |
-|    0.00500% |   14.29 |    14.29 |    20.61 |     30.07 |     26.59 |
-|    0.00100% |   16.61 |    16.61 |    23.96 |     40.99 |     34.98 |
-|    0.00050% |   17.61 |    17.61 |    25.41 |     46.92 |     39.37 |
-|    0.00010% |   19.93 |    19.93 |    28.76 |     64.66 |     51.87 |
+|         FPR | x=-log2 |   Theory |   Std BF |  SBBF-256 |  SBBF-512 | SBBF-512+pow2 |
+|-------------|---------|----------|----------|-----------|-----------|---------------|
+|   50.00000% |    1.00 |     1.00 |     1.44 |      3.25 |      3.23 |          4.48 |
+|   40.00000% |    1.32 |     1.32 |     1.91 |      3.65 |      3.62 |          5.02 |
+|   30.00000% |    1.74 |     1.74 |     2.51 |      4.14 |      4.10 |          5.69 |
+|   20.00000% |    2.32 |     2.32 |     3.35 |      4.82 |      4.76 |          6.59 |
+|   10.00000% |    3.32 |     3.32 |     4.79 |      5.99 |      5.88 |          8.15 |
+|    5.00000% |    4.32 |     4.32 |     6.24 |      7.23 |      7.05 |          9.77 |
+|    1.00000% |    6.64 |     6.64 |     9.59 |     10.53 |     10.10 |         14.00 |
+|    0.50000% |    7.64 |     7.64 |    11.03 |     12.20 |     11.61 |         16.09 |
+|    0.10000% |    9.97 |     9.97 |    14.38 |     16.89 |     15.72 |         21.80 |
+|    0.05000% |   10.97 |    10.97 |    15.82 |     19.34 |     17.81 |         24.70 |
+|    0.01000% |   13.29 |    13.29 |    19.17 |     26.34 |     23.61 |         32.73 |
+|    0.00500% |   14.29 |    14.29 |    20.61 |     30.07 |     26.59 |         36.86 |
+|    0.00100% |   16.61 |    16.61 |    23.96 |     40.99 |     34.98 |         48.50 |
 
 
-### 2.2 Hashing
+### 2.2 Memory Overhead Derivation
+To estimate memory overhead, we will compute the bits per element, $c$, required for common false positive rates ($\varepsilon$). For a standard Bloom filter, $c \approx 1.4427 \log_2(1/\varepsilon)$.
+
+For SBBF, we can use the bisection search approach specified above to approximate $c$ given FPR. 
+
+We will also include SBBF-512 with pow2 rounding in our comparisons.
+
+With pow2 rounding, fr $n \in [2^k, 2^{k+1})$, the block count is rounded up to $2^{k+1}$. The multiplicative overhead is $2^{k+1}/n$: We allocate $2^{k+1}$ blocks but only needed $n$.
+
+To compute the expected overhead, assume $n$ is uniformly distributed. Using the substitution $x = n / 2^k$, we have $x \in [1, 2)$ and the overhead becomes $2/x$. The expected overhead is:
+
+$$\mathbb{E}\left[\frac{2}{x}\right] = \int_1^2 \frac{2}{x} dx = 2 \ln 2 \approx 1.386$$
+
+
+### 2.3 Hashing
 Python's built in hash function does not provide a good distribution for small integers, where generally `hash(n) = n`. This can result in a much larger FPR, which is unacceptable since small integers are a common workload. For each hash value, `abloom` applies the MurmurHash3 finalizer to get a better distribution without the overhead of a full hash function. `test_fpr.py` verifies this approach.
 
 ```c
@@ -147,4 +152,4 @@ static inline uint64_t mix64(uint64_t x) {
 
 ## 3 Reproducing
 
-To reproduce the tables, use `scripts/generate_lut.py --verify` and `scripts/compare_bf.py`
+To reproduce the tables, run `scripts/compare_bf.py`
