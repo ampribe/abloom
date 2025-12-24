@@ -7,7 +7,7 @@
 `abloom` is a high-performance Bloom filter implementation for Python, written in C.
 
 ## Why `abloom`?
-- **Fast**: 2-3x faster than `rbloom` on add/update, 1.3x faster on lookup
+- **Fast**: 2-3x faster than `rbloom` on add/update, 1.2x faster on lookup
 - **Tested**: Python 3.8+ on Linux, MacOS, and Windows
 
 ## Quick Start
@@ -30,9 +30,9 @@ bf.clear()              # reset to empty
 ## Benchmarks
 | Operation | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | **abloom** | Speedup |
 |-----------|--------------|--------------|-------------------|--------|--------|---------|
-| Add | 84.1ms | 1.45s | 112.2ms | 49.5ms | **16.1ms** | 3.08x |
-| Lookup | 122.1ms | 1.25s | 92.2ms | 39.9ms | **30.1ms** | 1.33x |
-| Update | - | - | 110.5ms | 15.3ms | **6.4ms** | 2.40x |
+| Add | 83.5ms | 1.33s | 111.2ms | 49.0ms | **17.2ms** | 2.85x |
+| Lookup | 123.4ms | 1.21s | 82.9ms | 39.7ms | **33.0ms** | 1.20x |
+| Update | - | - | 110.8ms | 15.3ms | **6.6ms** | 2.33x |
 
 *1M integers, 1% FPR, Apple M2. Full results [here](https://github.com/ampribe/abloom/blob/main/BENCHMARKS.md).*
 
