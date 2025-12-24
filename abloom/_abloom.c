@@ -3,6 +3,9 @@
 #include <math.h>
 #include <string.h>
 
+#define XXH_INLINE_ALL
+#include "xxhash.h"
+
 // SBBF constants: 512-bit blocks (8 x 64-bit words)
 #define BLOCK_BITS 512
 #define BLOCK_BYTES 64
@@ -20,6 +23,7 @@ typedef struct {
   uint64_t block_mask;
   uint64_t capacity;
   double fp_rate;
+  int serializable;
 } BloomFilter;
 
 static double sbbf_fpr(double bits_per_element) {
@@ -94,12 +98,12 @@ static uint64_t calculate_block_count(uint64_t capacity, double fp_rate) {
   uint64_t total_bits = (uint64_t)ceil(capacity * bits_per_item);
   uint64_t min_blocks = (total_bits + BLOCK_BITS - 1) / BLOCK_BITS;
 
-  return next_power_of_2(min_blocks);
+  return min_blocks;
 }
 
 static inline void bloom_insert(BloomFilter *bf, uint64_t hash) {
   // Upper 32 bits select the block
-  uint64_t block_idx = (hash >> 32) & bf->block_mask;
+  uint64_t block_idx = (hash >> 32) % bf->block_count;
   uint32_t h_low = (uint32_t)hash;
 
   uint64_t *block = &bf->blocks[block_idx * BLOCK_WORDS];
@@ -124,7 +128,7 @@ static inline void bloom_insert(BloomFilter *bf, uint64_t hash) {
 }
 
 static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
-  uint64_t block_idx = (hash >> 32) & bf->block_mask;
+  uint64_t block_idx = (hash >> 32) % bf->block_count;
   uint32_t h_low = (uint32_t)hash;
   uint64_t *block = &bf->blocks[block_idx * BLOCK_WORDS];
 
@@ -145,17 +149,49 @@ static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
 #undef CHECK_WORD
 }
 
-static int get_hash(PyObject *item, uint64_t *out_hash) {
+// Fast path: uses Python's hash (not deterministic across processes)
+static inline int get_hash_fast(PyObject *item, uint64_t *out_hash) {
   Py_hash_t py_hash = PyObject_Hash(item);
-  if (py_hash == -1 && PyErr_Occurred()) return -1;
-
-  // try mixing first
+  if (py_hash == -1 && PyErr_Occurred())
+    return -1;
   *out_hash = mix64((uint64_t)py_hash);
   return 0;
 }
 
+// Deterministic hashing for serialization support
+static inline int get_hash_serializable(PyObject *item, uint64_t *out_hash) {
+  if (PyBytes_Check(item)) {
+    *out_hash = XXH64(PyBytes_AS_STRING(item), PyBytes_GET_SIZE(item), 0);
+  } else if (PyUnicode_Check(item)) {
+    Py_ssize_t size;
+    const char *utf8 = PyUnicode_AsUTF8AndSize(item, &size);
+    if (!utf8)
+      return -1;
+    *out_hash = XXH64(utf8, size, 0);
+  } else if (PyLong_Check(item)) {
+    int overflow;
+    long long val = PyLong_AsLongLongAndOverflow(item, &overflow);
+    if (overflow == 0) {
+      if (val == -1 && PyErr_Occurred())
+        return -1;
+      *out_hash = mix64((uint64_t)val);
+    } else {
+      PyErr_SetString(
+          PyExc_ValueError,
+          "Integers outside int64 range are not supported in serializable mode");
+      return -1;
+    }
+  } else {
+    PyErr_SetString(PyExc_TypeError,
+                    "Only bytes, str, and int are supported in serializable mode");
+    return -1;
+  }
+  return 0;
+}
+
 static int BloomFilter_compatible(BloomFilter *self, BloomFilter *other) {
-  return self->capacity == other->capacity && self->fp_rate == other->fp_rate;
+  return self->capacity == other->capacity && self->fp_rate == other->fp_rate &&
+         self->serializable == other->serializable;
 }
 
 static PyObject *BloomFilter_richcompare(BloomFilter *self, PyObject *other, int op) {
@@ -192,7 +228,7 @@ static PyObject *BloomFilter_or(BloomFilter *self, PyObject *other) {
 
   if (!BloomFilter_compatible(self, other_bf)) {
     PyErr_SetString(PyExc_ValueError,
-                    "BloomFilters must have the same capacity and fp_rate");
+                    "BloomFilters must have the same capacity, fp_rate, and serializable");
     return NULL;
   }
 
@@ -206,6 +242,7 @@ static PyObject *BloomFilter_or(BloomFilter *self, PyObject *other) {
   result->block_mask = self->block_mask;
   result->capacity = self->capacity;
   result->fp_rate = self->fp_rate;
+  result->serializable = self->serializable;
 
   size_t num_bytes = self->block_count * BLOCK_BYTES;
   result->blocks = PyMem_Malloc(num_bytes);
@@ -235,7 +272,7 @@ static PyObject *BloomFilter_ior(BloomFilter *self, PyObject *other) {
 
   if (!BloomFilter_compatible(self, other_bf)) {
     PyErr_SetString(PyExc_ValueError,
-                    "BloomFilters must have the same capacity and fp_rate");
+                    "BloomFilters must have the same capacity, fp_rate, and serializable");
     return NULL;
   }
 
@@ -277,6 +314,7 @@ static PyObject *BloomFilter_copy(BloomFilter *self, PyObject *Py_UNUSED(ignored
   copy->block_mask = self->block_mask;
   copy->capacity = self->capacity;
   copy->fp_rate = self->fp_rate;
+  copy->serializable = self->serializable;
 
   size_t num_bytes = self->block_count * BLOCK_BYTES;
   copy->blocks = PyMem_Malloc(num_bytes);
@@ -295,18 +333,33 @@ static PyObject *BloomFilter_update(BloomFilter *self, PyObject *iterable) {
     return NULL;
 
   PyObject *item;
-  while ((item = PyIter_Next(iter)) != NULL) {
-    uint64_t hash;
-    if (get_hash(item, &hash) < 0) {
-      Py_DECREF(item);
-      Py_DECREF(iter);
-      return NULL;
-    }
-    bloom_insert(self, hash);
-    Py_DECREF(item);
-  }
-  Py_DECREF(iter);
 
+  // Dispatch once outside the loop to avoid per-item branching
+  if (self->serializable) {
+    while ((item = PyIter_Next(iter)) != NULL) {
+      uint64_t hash;
+      if (get_hash_serializable(item, &hash) < 0) {
+        Py_DECREF(item);
+        Py_DECREF(iter);
+        return NULL;
+      }
+      bloom_insert(self, hash);
+      Py_DECREF(item);
+    }
+  } else {
+    while ((item = PyIter_Next(iter)) != NULL) {
+      uint64_t hash;
+      if (get_hash_fast(item, &hash) < 0) {
+        Py_DECREF(item);
+        Py_DECREF(iter);
+        return NULL;
+      }
+      bloom_insert(self, hash);
+      Py_DECREF(item);
+    }
+  }
+
+  Py_DECREF(iter);
   if (PyErr_Occurred())
     return NULL;
   Py_RETURN_NONE;
@@ -314,17 +367,20 @@ static PyObject *BloomFilter_update(BloomFilter *self, PyObject *iterable) {
 
 static PyObject *BloomFilter_add(BloomFilter *self, PyObject *item) {
   uint64_t hash;
-  if (get_hash(item, &hash) < 0)
+  int err = self->serializable ? get_hash_serializable(item, &hash)
+                               : get_hash_fast(item, &hash);
+  if (err < 0)
     return NULL;
 
   bloom_insert(self, hash);
-
   Py_RETURN_NONE;
 }
 
 static int BloomFilter_contains(BloomFilter *self, PyObject *item) {
   uint64_t hash;
-  if (get_hash(item, &hash) < 0)
+  int err = self->serializable ? get_hash_serializable(item, &hash)
+                               : get_hash_fast(item, &hash);
+  if (err < 0)
     return -1;
 
   return bloom_check(self, hash);
@@ -352,6 +408,10 @@ static PyObject *BloomFilter_get_bit_count(BloomFilter *self, void *closure) {
   return PyLong_FromUnsignedLongLong(bits);
 }
 
+static PyObject *BloomFilter_get_serializable(BloomFilter *self, void *closure) {
+  return PyBool_FromLong(self->serializable);
+}
+
 static void BloomFilter_dealloc(BloomFilter *self) {
   if (self->blocks) {
     PyMem_Free(self->blocks);
@@ -360,12 +420,13 @@ static void BloomFilter_dealloc(BloomFilter *self) {
 }
 
 static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
-  static char *kwlist[] = {"capacity", "fp_rate", NULL};
+  static char *kwlist[] = {"capacity", "fp_rate", "serializable", NULL};
   unsigned long long capacity;
   double fp_rate = 0.01;
+  int serializable = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "K|d", kwlist, &capacity,
-                                   &fp_rate)) {
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "K|dp", kwlist, &capacity,
+                                   &fp_rate, &serializable)) {
     return -1;
   }
 
@@ -382,6 +443,7 @@ static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
 
   self->capacity = capacity;
   self->fp_rate = fp_rate;
+  self->serializable = serializable;
   self->block_count = calculate_block_count(capacity, fp_rate);
   self->block_mask = self->block_count - 1;
 
@@ -404,6 +466,7 @@ static PyObject *BloomFilter_new(PyTypeObject *type, PyObject *args,
     self->block_mask = 0;
     self->capacity = 0;
     self->fp_rate = 0.0;
+    self->serializable = 0;
   }
   return (PyObject *)self;
 }
@@ -430,6 +493,8 @@ static PyGetSetDef BloomFilter_getsetters[] = {
      "Memory usage in bytes", NULL},
     {"bit_count", (getter)BloomFilter_get_bit_count, NULL,
      "Total bits in filter", NULL},
+    {"serializable", (getter)BloomFilter_get_serializable, NULL,
+     "Whether the filter uses deterministic hashing for serialization", NULL},
     {NULL}};
 
 static PySequenceMethods BloomFilter_as_sequence = {
