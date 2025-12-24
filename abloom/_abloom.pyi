@@ -12,6 +12,10 @@ class BloomFilter:
         capacity: Expected number of items to be inserted. Must be greater than 0.
         fp_rate: Target false positive rate. Must be between 0.0 and 1.0 (exclusive).
                 Default is 0.01 (1%).
+        serializable: If True, uses deterministic hashing (XXH64) that supports
+                serialization across processes. Only bytes, str, and int (within
+                int64 range) are supported in this mode. Default is False, which
+                uses Python's hash function for better performance.
 
     Raises:
         ValueError: If capacity is 0 or fp_rate is not in the valid range.
@@ -40,13 +44,18 @@ class BloomFilter:
     bit_count: int
     """Total number of bits in the filter."""
 
-    def __init__(self, capacity: int, fp_rate: float = 0.01) -> None:
+    serializable: bool
+    """Whether the filter uses deterministic hashing for serialization."""
+
+    def __init__(self, capacity: int, fp_rate: float = 0.01, serializable: bool = False) -> None:
         """Initialize a new Bloom filter.
 
         Args:
             capacity: Expected number of items to be inserted. Must be greater than 0.
             fp_rate: Target false positive rate. Must be between 0.0 and 1.0 (exclusive).
                     Default is 0.01 (1%).
+            serializable: If True, uses deterministic hashing for serialization support.
+                    Default is False.
 
         Raises:
             ValueError: If capacity is 0 or fp_rate is not in the valid range.
@@ -58,9 +67,13 @@ class BloomFilter:
 
         Args:
             item: Any hashable Python object to add to the filter.
+                In serializable mode, only bytes, str, and int (within int64 range)
+                are supported.
 
         Raises:
-            TypeError: If the item is not hashable.
+            TypeError: If the item is not hashable, or in serializable mode,
+                if the item is not bytes, str, or int.
+            ValueError: In serializable mode, if an int is outside int64 range.
         """
         ...
 
@@ -69,9 +82,13 @@ class BloomFilter:
 
         Args:
             items: An iterable of hashable Python objects to add to the filter.
+                In serializable mode, only bytes, str, and int (within int64 range)
+                are supported.
 
         Raises:
             TypeError: If any item is not hashable or items is not iterable.
+                In serializable mode, if any item is not bytes, str, or int.
+            ValueError: In serializable mode, if any int is outside int64 range.
         """
         ...
 
@@ -80,13 +97,17 @@ class BloomFilter:
 
         Args:
             item: Any hashable Python object to test for membership.
+                In serializable mode, only bytes, str, and int (within int64 range)
+                are supported.
 
         Returns:
             True if the item might be in the filter (possible false positive).
             False if the item is definitely not in the filter (no false negatives).
 
         Raises:
-            TypeError: If the item is not hashable.
+            TypeError: If the item is not hashable, or in serializable mode,
+                if the item is not bytes, str, or int.
+            ValueError: In serializable mode, if an int is outside int64 range.
         """
         ...
 
@@ -127,7 +148,7 @@ class BloomFilter:
     def __or__(self, other: BloomFilter) -> BloomFilter:
         """Return the union of two BloomFilters.
 
-        Both filters must have the same capacity and fp_rate.
+        Both filters must have the same capacity, fp_rate, and serializable setting.
 
         Args:
             other: Another BloomFilter with matching parameters.
@@ -136,14 +157,14 @@ class BloomFilter:
             A new BloomFilter containing all items from both filters.
 
         Raises:
-            ValueError: If capacity or fp_rate differ between filters.
+            ValueError: If capacity, fp_rate, or serializable differ between filters.
         """
         ...
 
     def __ior__(self, other: BloomFilter) -> BloomFilter:
         """Update this BloomFilter with the union of itself and another.
 
-        Both filters must have the same capacity and fp_rate.
+        Both filters must have the same capacity, fp_rate, and serializable setting.
 
         Args:
             other: Another BloomFilter with matching parameters.
@@ -152,7 +173,7 @@ class BloomFilter:
             This BloomFilter (modified in place).
 
         Raises:
-            ValueError: If capacity or fp_rate differ between filters.
+            ValueError: If capacity, fp_rate, or serializable differ between filters.
         """
         ...
 
