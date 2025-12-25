@@ -12,6 +12,29 @@
 #define BLOCK_WORDS 8
 #define BITS_PER_WORD 64
 
+#define ABLOOM_MAGIC "ABLM"
+#define ABLOOM_MAGIC_SIZE 4
+#define ABLOOM_VERSION 1
+#define ABLOOM_HEADER_SIZE 29  // 4 magic + 1 version + 8 capacity + 8 fp_rate + 8 block_count
+
+static inline void write_be64(unsigned char *buf, uint64_t val) {
+  buf[0] = (val >> 56) & 0xFF;
+  buf[1] = (val >> 48) & 0xFF;
+  buf[2] = (val >> 40) & 0xFF;
+  buf[3] = (val >> 32) & 0xFF;
+  buf[4] = (val >> 24) & 0xFF;
+  buf[5] = (val >> 16) & 0xFF;
+  buf[6] = (val >> 8) & 0xFF;
+  buf[7] = val & 0xFF;
+}
+
+static inline uint64_t read_be64(const unsigned char *buf) {
+  return ((uint64_t)buf[0] << 56) | ((uint64_t)buf[1] << 48) |
+         ((uint64_t)buf[2] << 40) | ((uint64_t)buf[3] << 32) |
+         ((uint64_t)buf[4] << 24) | ((uint64_t)buf[5] << 16) |
+         ((uint64_t)buf[6] << 8) | (uint64_t)buf[7];
+}
+
 // Salt constants from Parquet spec
 static const uint32_t SALT[8] = {0x47b6137bU, 0x44974d91U, 0x8824ad5bU,
                                  0xa2b7289dU, 0x705495c7U, 0x2df1424bU,
@@ -327,6 +350,147 @@ static PyObject *BloomFilter_copy(BloomFilter *self, PyObject *Py_UNUSED(ignored
   return (PyObject *)copy;
 }
 
+static PyObject *BloomFilter_to_bytes(BloomFilter *self, PyObject *Py_UNUSED(ignored)) {
+  if (!self->serializable) {
+    PyErr_SetString(PyExc_ValueError,
+                    "to_bytes() requires serializable=True");
+    return NULL;
+  }
+
+  size_t block_data_size = self->block_count * BLOCK_BYTES;
+  size_t total_size = ABLOOM_HEADER_SIZE + block_data_size;
+
+  PyObject *result = PyBytes_FromStringAndSize(NULL, total_size);
+  if (result == NULL) {
+    return NULL;
+  }
+
+  unsigned char *buf = (unsigned char *)PyBytes_AS_STRING(result);
+  size_t offset = 0;
+
+  memcpy(buf + offset, ABLOOM_MAGIC, ABLOOM_MAGIC_SIZE);
+  offset += ABLOOM_MAGIC_SIZE;
+
+  buf[offset++] = ABLOOM_VERSION;
+
+  write_be64(buf + offset, self->capacity);
+  offset += 8;
+
+  union {
+    double d;
+    uint64_t u;
+  } fp_union;
+  fp_union.d = self->fp_rate;
+  write_be64(buf + offset, fp_union.u);
+  offset += 8;
+
+  write_be64(buf + offset, self->block_count);
+  offset += 8;
+
+  size_t num_words = self->block_count * BLOCK_WORDS;
+  for (size_t i = 0; i < num_words; i++) {
+    write_be64(buf + offset, self->blocks[i]);
+    offset += 8;
+  }
+
+  return result;
+}
+
+static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
+  PyObject *data_obj;
+
+  if (!PyArg_ParseTuple(args, "O", &data_obj)) {
+    return NULL;
+  }
+
+  if (!PyBytes_Check(data_obj)) {
+    PyErr_SetString(PyExc_TypeError, "from_bytes() requires bytes");
+    return NULL;
+  }
+
+  const unsigned char *data = (const unsigned char *)PyBytes_AS_STRING(data_obj);
+  Py_ssize_t data_len = PyBytes_GET_SIZE(data_obj);
+
+  if (data_len < ABLOOM_HEADER_SIZE) {
+    PyErr_SetString(PyExc_ValueError, "Invalid data: too short for header");
+    return NULL;
+  }
+
+  size_t offset = 0;
+
+  if (memcmp(data + offset, ABLOOM_MAGIC, ABLOOM_MAGIC_SIZE) != 0) {
+    PyErr_SetString(PyExc_ValueError, "Invalid data: wrong magic bytes");
+    return NULL;
+  }
+  offset += ABLOOM_MAGIC_SIZE;
+
+  uint8_t version = data[offset++];
+  if (version != ABLOOM_VERSION) {
+    PyErr_Format(PyExc_ValueError,
+                 "Unsupported version: %u (expected %u)",
+                 version, ABLOOM_VERSION);
+    return NULL;
+  }
+
+  uint64_t capacity = read_be64(data + offset);
+  offset += 8;
+
+  union {
+    double d;
+    uint64_t u;
+  } fp_union;
+  fp_union.u = read_be64(data + offset);
+  double fp_rate = fp_union.d;
+  offset += 8;
+
+  uint64_t block_count = read_be64(data + offset);
+  offset += 8;
+
+  size_t expected_block_data = block_count * BLOCK_BYTES;
+  size_t expected_total = ABLOOM_HEADER_SIZE + expected_block_data;
+  if ((size_t)data_len != expected_total) {
+    PyErr_Format(PyExc_ValueError,
+                 "Invalid data: expected %zu bytes, got %zd",
+                 expected_total, data_len);
+    return NULL;
+  }
+
+  if (capacity == 0) {
+    PyErr_SetString(PyExc_ValueError, "Invalid data: capacity is 0");
+    return NULL;
+  }
+  if (fp_rate <= 0.0 || fp_rate >= 1.0) {
+    PyErr_SetString(PyExc_ValueError, "Invalid data: fp_rate out of range");
+    return NULL;
+  }
+
+  BloomFilter *self = (BloomFilter *)type->tp_alloc(type, 0);
+  if (self == NULL) {
+    return NULL;
+  }
+
+  self->capacity = capacity;
+  self->fp_rate = fp_rate;
+  self->serializable = 1;
+  self->block_count = block_count;
+  self->block_mask = block_count - 1;
+
+  size_t num_bytes = block_count * BLOCK_BYTES;
+  self->blocks = PyMem_Malloc(num_bytes);
+  if (self->blocks == NULL) {
+    Py_DECREF(self);
+    return PyErr_NoMemory();
+  }
+
+  size_t num_words = block_count * BLOCK_WORDS;
+  for (size_t i = 0; i < num_words; i++) {
+    self->blocks[i] = read_be64(data + offset);
+    offset += 8;
+  }
+
+  return (PyObject *)self;
+}
+
 static PyObject *BloomFilter_update(BloomFilter *self, PyObject *iterable) {
   PyObject *iter = PyObject_GetIter(iterable);
   if (iter == NULL)
@@ -480,6 +644,10 @@ static PyMethodDef BloomFilter_methods[] = {
      "Return a shallow copy of the bloom filter"},
     {"clear", (PyCFunction)BloomFilter_clear, METH_NOARGS,
      "Remove all items from the bloom filter"},
+    {"to_bytes", (PyCFunction)BloomFilter_to_bytes, METH_NOARGS,
+     "Serialize the filter to bytes. Requires serializable=True."},
+    {"from_bytes", (PyCFunction)BloomFilter_from_bytes, METH_VARARGS | METH_CLASS,
+     "Deserialize a filter from bytes. Returns a serializable filter."},
     {NULL}};
 
 static PyGetSetDef BloomFilter_getsetters[] = {

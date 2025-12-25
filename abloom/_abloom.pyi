@@ -192,3 +192,54 @@ class BloomFilter:
         capacity and fp_rate settings.
         """
         ...
+
+    def to_bytes(self) -> bytes:
+        """Serialize the filter to bytes.
+
+        Serializes the filter's metadata and bit array to a bytes object
+        that can be stored or transmitted and later restored with from_bytes().
+
+        Returns:
+            A bytes object containing the serialized filter.
+
+        Raises:
+            ValueError: If the filter was not created with serializable=True.
+
+        Example:
+            >>> bf = BloomFilter(1000, 0.01, serializable=True)
+            >>> bf.add("test")
+            >>> data = bf.to_bytes()
+            >>> bf2 = BloomFilter.from_bytes(data)
+            >>> "test" in bf2
+            True
+        """
+        ...
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> BloomFilter:
+        """Deserialize a filter from bytes.
+
+        Creates a new BloomFilter from data previously serialized with to_bytes().
+        The returned filter always has serializable=True.
+
+        Args:
+            data: A bytes object containing a serialized BloomFilter.
+
+        Returns:
+            A new BloomFilter with serializable=True, containing the
+            deserialized data.
+
+        Raises:
+            TypeError: If data is not a bytes object.
+            ValueError: If the data is invalid, truncated, has wrong magic bytes,
+                or uses an unsupported version.
+
+        Example:
+            >>> bf = BloomFilter(1000, 0.01, serializable=True)
+            >>> bf.add("test")
+            >>> data = bf.to_bytes()
+            >>> bf2 = BloomFilter.from_bytes(data)
+            >>> bf == bf2
+            True
+        """
+        ...
