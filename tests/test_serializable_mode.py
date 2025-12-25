@@ -228,3 +228,284 @@ class TestStandardModeAllowsAllHashable:
         item = (1, ("nested", "tuple"), frozenset([4, 5]))
         bf.add(item)
         assert item in bf
+
+
+class TestSerialization:
+    """Tests for to_bytes() and from_bytes() serialization methods."""
+
+    # --- Basic round-trip tests ---
+
+    def test_roundtrip_empty_filter(self):
+        """Empty filter can be serialized and deserialized."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        data = bf.to_bytes()
+        bf2 = BloomFilter.from_bytes(data)
+
+        assert bf == bf2
+        assert bf2.serializable is True
+
+    def test_roundtrip_single_item(self):
+        """Filter with one item preserves membership after round-trip."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.add("hello")
+        data = bf.to_bytes()
+        bf2 = BloomFilter.from_bytes(data)
+
+        assert "hello" in bf2
+        assert "not_added" not in bf2
+
+    def test_roundtrip_many_items(self):
+        """Filter with many items preserves all memberships after round-trip."""
+        bf = BloomFilter(10000, 0.01, serializable=True)
+        items = [f"item_{i}" for i in range(1000)]
+        bf.update(items)
+
+        data = bf.to_bytes()
+        bf2 = BloomFilter.from_bytes(data)
+
+        for item in items:
+            assert item in bf2
+
+    def test_roundtrip_mixed_types(self):
+        """Filter with mixed types (str, bytes, int) preserves membership."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        items = ["string", b"bytes", 42, -100, 0, "", b""]
+        bf.update(items)
+
+        data = bf.to_bytes()
+        bf2 = BloomFilter.from_bytes(data)
+
+        for item in items:
+            assert item in bf2
+
+    # --- Property preservation tests ---
+
+    def test_preserves_capacity(self):
+        """Deserialized filter has the same capacity."""
+        bf = BloomFilter(12345, 0.01, serializable=True)
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert bf2.capacity == 12345
+
+    def test_preserves_fp_rate(self):
+        """Deserialized filter has the same fp_rate."""
+        bf = BloomFilter(1000, 0.05, serializable=True)
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert bf2.fp_rate == 0.05
+
+    def test_preserves_bit_count(self):
+        """Deserialized filter has the same bit_count."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert bf2.bit_count == bf.bit_count
+
+    def test_preserves_byte_count(self):
+        """Deserialized filter has the same byte_count."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert bf2.byte_count == bf.byte_count
+
+    def test_deserialized_is_serializable(self):
+        """Deserialized filter always has serializable=True."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert bf2.serializable is True
+
+    def test_bit_pattern_preserved(self):
+        """Deserialized filter has identical bit patterns."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.update(["a", "b", "c", 1, 2, 3])
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert bf == bf2
+
+    # --- Error cases ---
+
+    def test_to_bytes_non_serializable_raises(self):
+        """to_bytes() raises ValueError when serializable=False."""
+        bf = BloomFilter(1000, 0.01, serializable=False)
+        with pytest.raises(ValueError, match="serializable"):
+            bf.to_bytes()
+
+    def test_from_bytes_truncated_header_raises(self):
+        """from_bytes() raises ValueError for truncated header."""
+        # Less than 29 bytes (header size)
+        with pytest.raises(ValueError):
+            BloomFilter.from_bytes(b"ABLM\x01" + b"\x00" * 10)
+
+    def test_from_bytes_wrong_magic_raises(self):
+        """from_bytes() raises ValueError for wrong magic bytes."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        data = bf.to_bytes()
+        # Corrupt the magic bytes
+        corrupted = b"XXXX" + data[4:]
+        with pytest.raises(ValueError, match="[Ii]nvalid|magic"):
+            BloomFilter.from_bytes(corrupted)
+
+    def test_from_bytes_unsupported_version_raises(self):
+        """from_bytes() raises ValueError for unsupported version."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        data = bf.to_bytes()
+        # Change version byte (byte 4) to an unsupported version
+        corrupted = data[:4] + b"\xff" + data[5:]
+        with pytest.raises(ValueError, match="[Vv]ersion"):
+            BloomFilter.from_bytes(corrupted)
+
+    def test_from_bytes_truncated_data_raises(self):
+        """from_bytes() raises ValueError when data is too short for block_count."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        data = bf.to_bytes()
+        # Truncate the block data
+        truncated = data[:50]
+        with pytest.raises(ValueError):
+            BloomFilter.from_bytes(truncated)
+
+    def test_from_bytes_not_bytes_raises(self):
+        """from_bytes() raises TypeError for non-bytes input."""
+        with pytest.raises(TypeError):
+            BloomFilter.from_bytes("not bytes")
+
+    # --- Compatibility with other operations ---
+
+    def test_deserialized_copy_works(self):
+        """copy() works on deserialized filter."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.add("test")
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        bf3 = bf2.copy()
+
+        assert bf3 == bf2
+        assert "test" in bf3
+
+    def test_deserialized_union_works(self):
+        """Union (|) works with deserialized filters."""
+        bf1 = BloomFilter(1000, 0.01, serializable=True)
+        bf1.add("a")
+        bf2 = BloomFilter(1000, 0.01, serializable=True)
+        bf2.add("b")
+
+        bf1_restored = BloomFilter.from_bytes(bf1.to_bytes())
+        bf2_restored = BloomFilter.from_bytes(bf2.to_bytes())
+
+        combined = bf1_restored | bf2_restored
+        assert "a" in combined
+        assert "b" in combined
+
+    def test_deserialized_ior_works(self):
+        """In-place union (|=) works with deserialized filters."""
+        bf1 = BloomFilter(1000, 0.01, serializable=True)
+        bf1.add("a")
+        bf2 = BloomFilter(1000, 0.01, serializable=True)
+        bf2.add("b")
+
+        bf1_restored = BloomFilter.from_bytes(bf1.to_bytes())
+        bf2_restored = BloomFilter.from_bytes(bf2.to_bytes())
+
+        bf1_restored |= bf2_restored
+        assert "a" in bf1_restored
+        assert "b" in bf1_restored
+
+    def test_deserialized_clear_works(self):
+        """clear() works on deserialized filter."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.add("test")
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        bf2.clear()
+
+        assert "test" not in bf2
+        assert not bf2  # Should be falsy when empty
+
+    def test_deserialized_add_works(self):
+        """add() works on deserialized filter."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        bf2.add("new_item")
+
+        assert "new_item" in bf2
+
+    def test_deserialized_equality(self):
+        """Deserialized filter equals original."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.update(["x", "y", "z"])
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+
+        assert bf == bf2
+        assert not (bf != bf2)
+
+    # --- Edge cases ---
+
+    def test_large_filter(self):
+        """Large filter serialization works correctly."""
+        bf = BloomFilter(1_000_000, 0.001, serializable=True)
+        items = [f"item_{i}" for i in range(10000)]
+        bf.update(items)
+
+        data = bf.to_bytes()
+        bf2 = BloomFilter.from_bytes(data)
+
+        assert bf == bf2
+        for item in items[:100]:  # Spot check
+            assert item in bf2
+
+    def test_various_fp_rates(self):
+        """Serialization works with various FP rates."""
+        for fp_rate in [0.5, 0.1, 0.01, 0.001, 0.0001]:
+            bf = BloomFilter(1000, fp_rate, serializable=True)
+            bf.add("test")
+
+            bf2 = BloomFilter.from_bytes(bf.to_bytes())
+            assert bf2.fp_rate == fp_rate
+            assert "test" in bf2
+
+    def test_empty_string_item_preserved(self):
+        """Empty string membership is preserved after serialization."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.add("")
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert "" in bf2
+
+    def test_empty_bytes_item_preserved(self):
+        """Empty bytes membership is preserved after serialization."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.add(b"")
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert b"" in bf2
+
+    def test_negative_integers_preserved(self):
+        """Negative integer membership is preserved after serialization."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.update([-1, -100, -999999])
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert -1 in bf2
+        assert -100 in bf2
+        assert -999999 in bf2
+
+    def test_int64_boundary_values_preserved(self):
+        """Int64 boundary values are preserved after serialization."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        max_int64 = 2**63 - 1
+        min_int64 = -(2**63)
+        bf.add(max_int64)
+        bf.add(min_int64)
+
+        bf2 = BloomFilter.from_bytes(bf.to_bytes())
+        assert max_int64 in bf2
+        assert min_int64 in bf2
+
+    def test_double_serialization(self):
+        """Filter can be serialized multiple times with same result."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.update(["a", "b", "c"])
+
+        data1 = bf.to_bytes()
+        data2 = bf.to_bytes()
+        assert data1 == data2
+
+    def test_serialize_deserialize_serialize(self):
+        """Filter survives serialize -> deserialize -> serialize cycle."""
+        bf = BloomFilter(1000, 0.01, serializable=True)
+        bf.update(["a", "b", "c"])
+
+        data1 = bf.to_bytes()
+        bf2 = BloomFilter.from_bytes(data1)
+        data2 = bf2.to_bytes()
+
+        assert data1 == data2
