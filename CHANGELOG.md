@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Planned
-- Allow user to provide hash function and serialize
-- Possible optimizations for large allocations
 - Variants: Counting BF, Scalable BF
+- Allow floats in serializable Bloom filter
+
+### Added
+- `serializable` option for deterministic hashing of bytes, ints, and strings
+
+### Removed
+- block count rounding to pow2
 
 ## [0.3.0] - 2025-12-23
 ### Added
