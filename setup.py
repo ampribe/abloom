@@ -7,7 +7,6 @@ setup(
             sources=[
                 "abloom/_abloom.c",
             ],
-            include_dirs=["."],
             extra_compile_args=["-O3"],
         )
     ]
