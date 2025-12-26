@@ -12,10 +12,10 @@ class BloomFilter:
         capacity: Expected number of items to be inserted. Must be greater than 0.
         fp_rate: Target false positive rate. Must be between 0.0 and 1.0 (exclusive).
                 Default is 0.01 (1%).
-        serializable: If True, uses deterministic hashing (XXH64) that supports
-                serialization across processes. Only bytes, str, and int (within
-                int64 range) are supported in this mode. Default is False, which
-                uses Python's hash function for better performance.
+        serializable: If True, uses deterministic hashing that supports
+                serialization across processes. Only bytes, str, int,
+                and float are supported in this mode. Default is False,
+                which uses Python's hash function for better performance.
 
     Raises:
         ValueError: If capacity is 0 or fp_rate is not in the valid range.
@@ -67,13 +67,12 @@ class BloomFilter:
 
         Args:
             item: Any hashable Python object to add to the filter.
-                In serializable mode, only bytes, str, and int (within int64 range)
-                are supported.
+                In serializable mode, only bytes, str, int,
+                and float are supported.
 
         Raises:
             TypeError: If the item is not hashable, or in serializable mode,
-                if the item is not bytes, str, or int.
-            ValueError: In serializable mode, if an int is outside int64 range.
+                if the item is not bytes, str, int, or float.
         """
         ...
 
@@ -82,13 +81,12 @@ class BloomFilter:
 
         Args:
             items: An iterable of hashable Python objects to add to the filter.
-                In serializable mode, only bytes, str, and int (within int64 range)
-                are supported.
+                In serializable mode, only bytes, str, int,
+                and float are supported.
 
         Raises:
             TypeError: If any item is not hashable or items is not iterable.
-                In serializable mode, if any item is not bytes, str, or int.
-            ValueError: In serializable mode, if any int is outside int64 range.
+                In serializable mode, if any item is not bytes, str, int, or float.
         """
         ...
 
@@ -97,8 +95,8 @@ class BloomFilter:
 
         Args:
             item: Any hashable Python object to test for membership.
-                In serializable mode, only bytes, str, and int (within int64 range)
-                are supported.
+                In serializable mode, only bytes, str, int,
+                and float are supported.
 
         Returns:
             True if the item might be in the filter (possible false positive).
@@ -106,7 +104,7 @@ class BloomFilter:
 
         Raises:
             TypeError: If the item is not hashable, or in serializable mode,
-                if the item is not bytes, str, or int.
+                if the item is not bytes, str, int, or float.
             ValueError: In serializable mode, if an int is outside int64 range.
         """
         ...

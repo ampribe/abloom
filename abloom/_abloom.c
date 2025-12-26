@@ -191,22 +191,14 @@ static inline int get_hash_serializable(PyObject *item, uint64_t *out_hash) {
     if (!utf8)
       return -1;
     *out_hash = XXH64(utf8, size, 0);
-  } else if (PyLong_Check(item)) {
-    int overflow;
-    long long val = PyLong_AsLongLongAndOverflow(item, &overflow);
-    if (overflow == 0) {
-      if (val == -1 && PyErr_Occurred())
-        return -1;
-      *out_hash = mix64((uint64_t)val);
-    } else {
-      PyErr_SetString(
-          PyExc_ValueError,
-          "Integers outside int64 range are not supported in serializable mode");
+  } else if (PyLong_Check(item) || PyFloat_Check(item)) {
+    Py_hash_t py_hash = PyObject_Hash(item);
+    if (py_hash == -1 && PyErr_Occurred())
       return -1;
-    }
+    *out_hash = mix64((uint64_t)py_hash);
   } else {
     PyErr_SetString(PyExc_TypeError,
-                    "Only bytes, str, and int are supported in serializable mode");
+                    "Only bytes, str, int, and float are supported in serializable mode");
     return -1;
   }
   return 0;
