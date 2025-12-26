@@ -1,6 +1,7 @@
 import pytest
 import os
 import random
+from functools import partial
 import uuid as uuid_lib
 from dataclasses import dataclass
 from abloom import BloomFilter as ABloomFilter
@@ -13,7 +14,8 @@ import pyfusefilter
 # ============ CONFIGURATION ============
 
 LIBRARIES = {
-    "abloom": ABloomFilter,
+    "abloom[default]": ABloomFilter,
+    "abloom[serializable]": partial(ABloomFilter, serializable=True),
     "rbloom": RBloomFilter,
     "pybloom_live": PyBloom,
     "fastbloom_rs": FastBloomFilter,

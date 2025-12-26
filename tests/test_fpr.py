@@ -24,12 +24,10 @@ from abloom import BloomFilter
 # ============ CONFIGURATION ============
 
 # Tolerance multiplier: empirical FPR must be <= target * TOLERANCE
-# 1.1 = 10% above target is acceptable
-TOLERANCE_MULTIPLIER = 1.1
+TOLERANCE_MULTIPLIER = 1.05
 
 # Number of non-inserted items to probe for false positives
-# 100K provides good statistical precision while keeping tests fast
-PROBE_COUNT = 100_000
+PROBE_COUNT = 500_000
 
 
 # ============ TEST CONFIGURATIONS ============
