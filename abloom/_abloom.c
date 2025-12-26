@@ -15,7 +15,8 @@
 #define ABLOOM_MAGIC "ABLM"
 #define ABLOOM_MAGIC_SIZE 4
 #define ABLOOM_VERSION 1
-#define ABLOOM_HEADER_SIZE 29  // 4 magic + 1 version + 8 capacity + 8 fp_rate + 8 block_count
+#define ABLOOM_HEADER_SIZE                                                     \
+  29 // 4 magic + 1 version + 8 capacity + 8 fp_rate + 8 block_count
 
 static inline void write_be64(unsigned char *buf, uint64_t val) {
   buf[0] = (val >> 56) & 0xFF;
@@ -43,16 +44,12 @@ static const uint32_t SALT[8] = {0x47b6137bU, 0x44974d91U, 0x8824ad5bU,
 typedef struct {
   PyObject_HEAD uint64_t *blocks;
   uint64_t block_count;
-  uint64_t block_mask;
   uint64_t capacity;
   double fp_rate;
   int serializable;
 } BloomFilter;
 
 static double sbbf_fpr(double bits_per_element) {
-  if (bits_per_element <= 0.0)
-    return 1.0;
-
   double a = 512.0 / bits_per_element;
   double exp_neg_a = exp(-a);
   double poisson_pmf = exp_neg_a;
@@ -97,31 +94,16 @@ static inline uint64_t mix64(uint64_t x) {
   return x;
 }
 
-static uint64_t next_power_of_2(uint64_t n) {
-  if (n == 0)
-    return 1;
-  n--;
-  n |= n >> 1;
-  n |= n >> 2;
-  n |= n >> 4;
-  n |= n >> 8;
-  n |= n >> 16;
-  n |= n >> 32;
-  return n + 1;
-}
-
-static uint64_t calculate_block_count(uint64_t capacity, double fp_rate) {
-  if (capacity == 0)
-    capacity = 1;
-
+static int64_t calculate_block_count(uint64_t capacity, double fp_rate) {
   double bits_per_item = sbbf_bits_for_fpr(fp_rate);
-  if (bits_per_item < 8.0)
-    bits_per_item = 8.0;
+  if (capacity > (double)UINT64_MAX / bits_per_item) {
+    return -1;
+  }
 
   uint64_t total_bits = (uint64_t)ceil(capacity * bits_per_item);
   uint64_t min_blocks = (total_bits + BLOCK_BITS - 1) / BLOCK_BITS;
 
-  return min_blocks;
+  return (int64_t)min_blocks;
 }
 
 static inline void bloom_insert(BloomFilter *bf, uint64_t hash) {
@@ -197,8 +179,9 @@ static inline int get_hash_serializable(PyObject *item, uint64_t *out_hash) {
       return -1;
     *out_hash = mix64((uint64_t)py_hash);
   } else {
-    PyErr_SetString(PyExc_TypeError,
-                    "Only bytes, str, int, and float are supported in serializable mode");
+    PyErr_SetString(
+        PyExc_TypeError,
+        "Only bytes, str, int, and float are supported in serializable mode");
     return -1;
   }
   return 0;
@@ -209,7 +192,8 @@ static int BloomFilter_compatible(BloomFilter *self, BloomFilter *other) {
          self->serializable == other->serializable;
 }
 
-static PyObject *BloomFilter_richcompare(BloomFilter *self, PyObject *other, int op) {
+static PyObject *BloomFilter_richcompare(BloomFilter *self, PyObject *other,
+                                         int op) {
   if (op != Py_EQ && op != Py_NE) {
     Py_RETURN_NOTIMPLEMENTED;
   }
@@ -242,8 +226,9 @@ static PyObject *BloomFilter_or(BloomFilter *self, PyObject *other) {
   BloomFilter *other_bf = (BloomFilter *)other;
 
   if (!BloomFilter_compatible(self, other_bf)) {
-    PyErr_SetString(PyExc_ValueError,
-                    "BloomFilters must have the same capacity, fp_rate, and serializable");
+    PyErr_SetString(
+        PyExc_ValueError,
+        "BloomFilters must have the same capacity, fp_rate, and serializable");
     return NULL;
   }
 
@@ -254,7 +239,6 @@ static PyObject *BloomFilter_or(BloomFilter *self, PyObject *other) {
   }
 
   result->block_count = self->block_count;
-  result->block_mask = self->block_mask;
   result->capacity = self->capacity;
   result->fp_rate = self->fp_rate;
   result->serializable = self->serializable;
@@ -286,8 +270,9 @@ static PyObject *BloomFilter_ior(BloomFilter *self, PyObject *other) {
   BloomFilter *other_bf = (BloomFilter *)other;
 
   if (!BloomFilter_compatible(self, other_bf)) {
-    PyErr_SetString(PyExc_ValueError,
-                    "BloomFilters must have the same capacity, fp_rate, and serializable");
+    PyErr_SetString(
+        PyExc_ValueError,
+        "BloomFilters must have the same capacity, fp_rate, and serializable");
     return NULL;
   }
 
@@ -313,20 +298,21 @@ static int BloomFilter_bool(BloomFilter *self) {
   return 0;
 }
 
-static PyObject *BloomFilter_clear(BloomFilter *self, PyObject *Py_UNUSED(ignored)) {
+static PyObject *BloomFilter_clear(BloomFilter *self,
+                                   PyObject *Py_UNUSED(ignored)) {
   size_t num_bytes = self->block_count * BLOCK_BYTES;
   memset(self->blocks, 0, num_bytes);
   Py_RETURN_NONE;
 }
 
-static PyObject *BloomFilter_copy(BloomFilter *self, PyObject *Py_UNUSED(ignored)) {
+static PyObject *BloomFilter_copy(BloomFilter *self,
+                                  PyObject *Py_UNUSED(ignored)) {
   BloomFilter *copy = (BloomFilter *)Py_TYPE(self)->tp_alloc(Py_TYPE(self), 0);
   if (copy == NULL) {
     return NULL;
   }
 
   copy->block_count = self->block_count;
-  copy->block_mask = self->block_mask;
   copy->capacity = self->capacity;
   copy->fp_rate = self->fp_rate;
   copy->serializable = self->serializable;
@@ -342,10 +328,10 @@ static PyObject *BloomFilter_copy(BloomFilter *self, PyObject *Py_UNUSED(ignored
   return (PyObject *)copy;
 }
 
-static PyObject *BloomFilter_to_bytes(BloomFilter *self, PyObject *Py_UNUSED(ignored)) {
+static PyObject *BloomFilter_to_bytes(BloomFilter *self,
+                                      PyObject *Py_UNUSED(ignored)) {
   if (!self->serializable) {
-    PyErr_SetString(PyExc_ValueError,
-                    "to_bytes() requires serializable=True");
+    PyErr_SetString(PyExc_ValueError, "to_bytes() requires serializable=True");
     return NULL;
   }
 
@@ -400,7 +386,8 @@ static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
     return NULL;
   }
 
-  const unsigned char *data = (const unsigned char *)PyBytes_AS_STRING(data_obj);
+  const unsigned char *data =
+      (const unsigned char *)PyBytes_AS_STRING(data_obj);
   Py_ssize_t data_len = PyBytes_GET_SIZE(data_obj);
 
   if (data_len < ABLOOM_HEADER_SIZE) {
@@ -418,8 +405,7 @@ static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
 
   uint8_t version = data[offset++];
   if (version != ABLOOM_VERSION) {
-    PyErr_Format(PyExc_ValueError,
-                 "Unsupported version: %u (expected %u)",
+    PyErr_Format(PyExc_ValueError, "Unsupported version: %u (expected %u)",
                  version, ABLOOM_VERSION);
     return NULL;
   }
@@ -441,8 +427,7 @@ static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
   size_t expected_block_data = block_count * BLOCK_BYTES;
   size_t expected_total = ABLOOM_HEADER_SIZE + expected_block_data;
   if ((size_t)data_len != expected_total) {
-    PyErr_Format(PyExc_ValueError,
-                 "Invalid data: expected %zu bytes, got %zd",
+    PyErr_Format(PyExc_ValueError, "Invalid data: expected %zu bytes, got %zd",
                  expected_total, data_len);
     return NULL;
   }
@@ -455,6 +440,12 @@ static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
     PyErr_SetString(PyExc_ValueError, "Invalid data: fp_rate out of range");
     return NULL;
   }
+  int64_t expected_blocks = calculate_block_count(capacity, fp_rate);
+  if (expected_blocks <= 0 || block_count != expected_blocks) {
+    PyErr_SetString(PyExc_ValueError,
+                    "Invalid data: block_count doesn't match capacity/fp_rate");
+    return NULL;
+  }
 
   BloomFilter *self = (BloomFilter *)type->tp_alloc(type, 0);
   if (self == NULL) {
@@ -465,7 +456,6 @@ static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
   self->fp_rate = fp_rate;
   self->serializable = 1;
   self->block_count = block_count;
-  self->block_mask = block_count - 1;
 
   size_t num_bytes = block_count * BLOCK_BYTES;
   self->blocks = PyMem_Malloc(num_bytes);
@@ -564,7 +554,8 @@ static PyObject *BloomFilter_get_bit_count(BloomFilter *self, void *closure) {
   return PyLong_FromUnsignedLongLong(bits);
 }
 
-static PyObject *BloomFilter_get_serializable(BloomFilter *self, void *closure) {
+static PyObject *BloomFilter_get_serializable(BloomFilter *self,
+                                              void *closure) {
   return PyBool_FromLong(self->serializable);
 }
 
@@ -577,19 +568,21 @@ static void BloomFilter_dealloc(BloomFilter *self) {
 
 static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
   static char *kwlist[] = {"capacity", "fp_rate", "serializable", NULL};
-  unsigned long long capacity;
+  long long capacity_signed;
   double fp_rate = 0.01;
   int serializable = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "K|dp", kwlist, &capacity,
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "L|dp", kwlist, &capacity_signed,
                                    &fp_rate, &serializable)) {
     return -1;
   }
 
-  if (capacity == 0) {
+  if (capacity_signed <= 0) {
     PyErr_SetString(PyExc_ValueError, "Capacity must be greater than 0");
     return -1;
   }
+
+  uint64_t capacity = (uint64_t)capacity_signed;
 
   if (fp_rate <= 0.0 || fp_rate >= 1.0) {
     PyErr_SetString(PyExc_ValueError,
@@ -597,11 +590,17 @@ static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
     return -1;
   }
 
+  int64_t block_count = calculate_block_count(capacity, fp_rate);
+  if (block_count < 0) {
+    PyErr_SetString(PyExc_ValueError,
+                    "Capacity too large: would cause integer overflow");
+    return -1;
+  }
+
   self->capacity = capacity;
   self->fp_rate = fp_rate;
   self->serializable = serializable;
-  self->block_count = calculate_block_count(capacity, fp_rate);
-  self->block_mask = self->block_count - 1;
+  self->block_count = (uint64_t)block_count;
 
   size_t num_bytes = self->block_count * BLOCK_BYTES;
   self->blocks = PyMem_Calloc(num_bytes, 1);
@@ -619,7 +618,6 @@ static PyObject *BloomFilter_new(PyTypeObject *type, PyObject *args,
   if (self != NULL) {
     self->blocks = NULL;
     self->block_count = 0;
-    self->block_mask = 0;
     self->capacity = 0;
     self->fp_rate = 0.0;
     self->serializable = 0;
@@ -638,7 +636,8 @@ static PyMethodDef BloomFilter_methods[] = {
      "Remove all items from the bloom filter"},
     {"to_bytes", (PyCFunction)BloomFilter_to_bytes, METH_NOARGS,
      "Serialize the filter to bytes. Requires serializable=True."},
-    {"from_bytes", (PyCFunction)BloomFilter_from_bytes, METH_VARARGS | METH_CLASS,
+    {"from_bytes", (PyCFunction)BloomFilter_from_bytes,
+     METH_VARARGS | METH_CLASS,
      "Deserialize a filter from bytes. Returns a serializable filter."},
     {NULL}};
 
@@ -672,9 +671,8 @@ static PyObject *BloomFilter_repr(BloomFilter *self) {
   if (!fp_obj)
     return NULL;
 
-  PyObject *repr =
-      PyUnicode_FromFormat("<BloomFilter capacity=%llu fp_rate=%R>",
-                           self->capacity, fp_obj);
+  PyObject *repr = PyUnicode_FromFormat(
+      "<BloomFilter capacity=%llu fp_rate=%R>", self->capacity, fp_obj);
 
   Py_DECREF(fp_obj);
   return repr;
