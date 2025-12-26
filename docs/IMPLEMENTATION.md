@@ -137,7 +137,8 @@ $$\mathbb{E}\left[\frac{2}{x}\right] = \int_1^2 \frac{2}{x} dx = 2 \ln 2 \approx
 
 
 ### 2.3 Hashing
-Python's built in hash function does not provide a good distribution for small integers, where generally `hash(n) = n`. This can result in a much larger FPR, which is unacceptable since small integers are a common workload. For each hash value, `abloom` applies the MurmurHash3 finalizer to get a better distribution without the overhead of a full hash function. `test_fpr.py` verifies this approach.
+By default, `abloom` uses Python's built in hashing for speed.
+Python's built in hash function does not provide a good distribution for small integers, where generally `hash(n) = n`. This can result in a much larger FPR, which is unacceptable since small integers are a common workload. For each hash value, `abloom` applies the MurmurHash3 finalizer to get a better distribution without the overhead of a full hash function. `test_fpr.py` verifies that this approach achieves the target FPR.
 
 ```c
 static inline uint64_t mix64(uint64_t x) {
@@ -149,6 +150,8 @@ static inline uint64_t mix64(uint64_t x) {
   return x;
 }
 ```
+
+Python's hashing "salts" `bytes` and `str` values with a process-specific seed for security. See [here](https://docs.python.org/3/reference/datamodel.html#object.__hash__). To allow filters to be transferred between processes, `abloom` implements a serializable mode, which accepts `bytes`, `str`, `int`, and `float` types only. This restriction ensures hashes are reproducible across processes. This mode uses xxHash for hashing `bytes` and `str` and provides the same hash values between processes.
 
 ## 3 Reproducing
 

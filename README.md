@@ -83,7 +83,7 @@ with open("filter.bloom", "rb") as f:
 "user123" in restored  # True
 ```
 
-**Note**: Serialization requires `serializable=True`. This mode uses deterministic XXH64 hashing and supports `bytes`, `str`, and `int` types only. By default, `abloom` relies on Python's built-in hashing. This is faster, but makes transferring filters between processes impossible because Python uses a unique seed for hashes within each process.
+**Note:** You must set `serializable=True` during initialization to transfer filters between processes. This mode uses a deterministic hash function (xxHash) and supports `bytes`, `str`, `int`, and `float` types only. Otherwise, `abloom` will use Python's built-in hashing, which relies on a process-specific seed to hash `bytes` and `str`. `int` and `float` types in serializable mode will still behave "normally," for example, `15` and `15.0` will hash to the same value, as will `0.0` and `-0.0`. This is because `abloom` still uses Python's built-in hashing for `int` and `float` types.
 
 ## API Summary
 
