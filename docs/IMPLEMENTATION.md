@@ -10,6 +10,7 @@
   - [2.1 Memory Overhead](#21-memory-overhead)
   - [2.2 Memory Overhead Derivation](#22-memory-overhead-derivation)
   - [2.3 Hashing](#23-hashing)
+  - [2.4 Thread Safety](#24-thread-safety)
 - [3 Reproducing](#3-reproducing)
 
 ## 1 Split Block Bloom Filter (SBBF)
@@ -152,6 +153,11 @@ static inline uint64_t mix64(uint64_t x) {
 ```
 
 Python's hashing "salts" `bytes` and `str` values with a process-specific seed for security. See [here](https://docs.python.org/3/reference/datamodel.html#object.__hash__). To allow filters to be transferred between processes, `abloom` implements a serializable mode, which accepts `bytes`, `str`, `int`, and `float` types only. This restriction ensures hashes are reproducible across processes. This mode uses xxHash for hashing `bytes` and `str` and provides the same hash values between processes.
+
+### 2.4 Thread Safety
+By default, setting a bit within a filter in `abloom` is not atomic (`block[i] |= (1ULL << p0);`): It requires separate instructions to read, modify, and write the byte. If thread A reads, modifies, and writes between thread B's read, modify, and write, thread B will overwrite thread A's modification with old data. However, Python's global interpreter lock (GIL) solves this issue. In Python versions that use the GIL, the running thread only releases the lock between Python bytecode instructions. Each of `abloom`'s functions, `add`, `update`, and `__contains__` run within one bytecode instruction, `CALL_METHOD`. Since thread switching does not occur during function execution, a Python thread can complete its write without interruption by another Python thread.
+
+Without the GIL, multiple Python threads can run in parallel on separate cores. Now, multiple threads can modify a shared filter without guarantees that one thread has read, modified, and written before the other begins. `abloom` resolves this by using `atomic_fetch_or_explicit` from `stdatomic.h`, which makes each of the read, modify, writes atomic. 
 
 ## 3 Reproducing
 
