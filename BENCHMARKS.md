@@ -8,7 +8,7 @@
 >
 > **Python:** 3.13.7
 >
-> **Commit:** `bf04998b` (main)
+> **Commit:** `7b348507` (main)
 >
 > **Libraries:** Fuse16, Fuse8, Xor16, Xor8, fastbloom_rs, pybloom_live, pybloomfiltermmap, rbloom, abloom[default], abloom[free_threading], abloom[serializable+free_threading], abloom[serializable]
 >
@@ -20,9 +20,9 @@
 
 | Operation | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | abloom[default] | Speedup (vs rbloom) |
 |-----------|--------|--------|--------|--------|--------|---------|
-| Add | 85.2ms ± 0.2ms | 1.34s ± 0.01s | 111.3ms ± 0.2ms | 49.5ms ± 0.2ms | 15.5ms ± 0.2ms | **3.19x** |
-| Lookup | 122.1ms ± 0.6ms | 1.18s ± 0.00s | 82.7ms ± 0.2ms | 39.4ms ± 0.0ms | 32.9ms ± 0.3ms | **1.20x** |
-| Update | - | - | 110.7ms ± 0.1ms | 15.3ms ± 0.0ms | 5.7ms ± 0.1ms | **2.70x** |
+| Add | 84.9ms ± 0.2ms | 1.34s ± 0.00s | 111.5ms ± 0.2ms | 49.0ms ± 0.0ms | 15.3ms ± 0.1ms | **3.19x** |
+| Lookup | 122.7ms ± 1.2ms | 1.17s ± 0.00s | 82.4ms ± 0.2ms | 39.6ms ± 0.1ms | 31.8ms ± 0.0ms | **1.24x** |
+| Update | - | - | 113.0ms ± 2.3ms | 15.2ms ± 0.1ms | 5.6ms ± 0.0ms | **2.72x** |
 
 ## Detailed Results
 
@@ -30,34 +30,34 @@
 
 | Data Type | Size | FP Rate | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | abloom[free_threading] | abloom[serializable+free_threading] | abloom[serializable] | abloom[default] | Speedup (vs rbloom) |
 |-----------|------|---------|--------|--------|--------|--------|--------|--------|--------|--------|---------|
-| int | 1M | 0.10% | 88.2ms ± 0.1ms | 1.77s ± 0.00s | 133.4ms ± 0.3ms | 55.0ms ± 0.1ms | 19.0ms ± 0.1ms | 20.3ms ± 0.1ms | 17.1ms ± 0.2ms | 15.7ms ± 0.3ms | **3.50x** |
-| int | 1M | 1.0% | 85.2ms ± 0.2ms | 1.34s ± 0.01s | 111.3ms ± 0.2ms | 49.5ms ± 0.2ms | 18.8ms ± 0.0ms | 20.3ms ± 0.1ms | 16.7ms ± 0.1ms | 15.5ms ± 0.2ms | **3.19x** |
-| int | 10M | 0.10% | 1.13s ± 0.01s | 17.90s ± 0.22s | 1.64s ± 0.02s | 749.2ms ± 8.4ms | 287.8ms ± 11.2ms | 285.6ms ± 5.2ms | 299.7ms ± 17.1ms | 281.2ms ± 6.1ms | **2.66x** |
-| int | 10M | 1.0% | 904.5ms ± 8.5ms | 13.44s ± 0.05s | 1.17s ± 0.02s | 541.1ms ± 8.1ms | 213.1ms ± 2.8ms | 225.5ms ± 7.1ms | 194.7ms ± 1.3ms | 185.1ms ± 4.4ms | **2.92x** |
-| uuid | 1M | 0.10% | 123.7ms ± 0.4ms | 1.67s ± 0.01s | 190.1ms ± 0.5ms | 53.7ms ± 0.1ms | 18.5ms ± 0.1ms | 28.7ms ± 0.1ms | 24.4ms ± 0.3ms | 15.8ms ± 0.1ms | **3.41x** |
-| uuid | 1M | 1.0% | 121.2ms ± 0.6ms | 1.30s ± 0.01s | 156.5ms ± 0.2ms | 48.4ms ± 0.1ms | 18.5ms ± 0.1ms | 28.6ms ± 0.1ms | 24.2ms ± 0.1ms | 15.5ms ± 0.2ms | **3.13x** |
+| int | 1M | 0.10% | 87.4ms ± 0.1ms | 1.75s ± 0.01s | 133.6ms ± 0.2ms | 54.6ms ± 0.0ms | 18.9ms ± 0.1ms | 20.4ms ± 0.1ms | 16.8ms ± 0.1ms | 15.4ms ± 0.1ms | **3.54x** |
+| int | 1M | 1.0% | 84.9ms ± 0.2ms | 1.34s ± 0.00s | 111.5ms ± 0.2ms | 49.0ms ± 0.0ms | 18.7ms ± 0.0ms | 20.2ms ± 0.1ms | 16.6ms ± 0.1ms | 15.3ms ± 0.1ms | **3.19x** |
+| int | 10M | 0.10% | 1.13s ± 0.02s | 17.72s ± 0.02s | 1.61s ± 0.00s | 760.1ms ± 7.9ms | 278.0ms ± 5.7ms | 292.3ms ± 5.3ms | 249.5ms ± 6.9ms | 231.5ms ± 10.0ms | **3.28x** |
+| int | 10M | 1.0% | 914.7ms ± 7.4ms | 13.43s ± 0.06s | 1.16s ± 0.00s | 546.9ms ± 2.9ms | 211.6ms ± 3.7ms | 225.5ms ± 3.7ms | 184.7ms ± 3.6ms | 168.7ms ± 4.8ms | **3.24x** |
+| uuid | 1M | 0.10% | 124.0ms ± 0.1ms | 1.67s ± 0.01s | 189.4ms ± 0.9ms | 53.4ms ± 0.4ms | 18.6ms ± 0.1ms | 28.5ms ± 0.0ms | 23.8ms ± 0.1ms | 15.3ms ± 0.0ms | **3.49x** |
+| uuid | 1M | 1.0% | 121.3ms ± 0.4ms | 1.29s ± 0.00s | 155.8ms ± 0.1ms | 48.2ms ± 0.1ms | 18.5ms ± 0.0ms | 28.5ms ± 0.0ms | 23.7ms ± 0.0ms | 15.2ms ± 0.0ms | **3.16x** |
 
 ### Lookup Operations
 
 | Data Type | Size | FP Rate | Fuse16 | Fuse8 | Xor16 | Xor8 | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | abloom[free_threading] | abloom[serializable+free_threading] | abloom[serializable] | abloom[default] | Speedup (vs rbloom) |
 |-----------|------|---------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|---------|
-| int | 1M | 0.10% | - | - | - | - | 123.7ms ± 0.1ms | 1.58s ± 0.00s | 103.3ms ± 0.5ms | 45.1ms ± 0.1ms | 32.8ms ± 0.3ms | 33.7ms ± 0.1ms | 34.6ms ± 0.1ms | 33.4ms ± 0.6ms | **1.35x** |
-| int | 1M | 1.0% | 333.2ms ± 2.6ms | 336.2ms ± 3.4ms | 323.9ms ± 1.8ms | 326.3ms ± 3.8ms | 122.1ms ± 0.6ms | 1.18s ± 0.00s | 82.7ms ± 0.2ms | 39.4ms ± 0.0ms | 32.7ms ± 0.3ms | 33.6ms ± 0.1ms | 34.6ms ± 0.1ms | 32.9ms ± 0.3ms | **1.20x** |
-| int | 10M | 0.10% | - | - | - | - | 1.56s ± 0.12s | 15.93s ± 0.11s | 1.30s ± 0.04s | 650.4ms ± 5.1ms | 469.3ms ± 11.0ms | 461.3ms ± 3.8ms | 572.6ms ± 5.7ms | 546.3ms ± 2.4ms | **1.19x** |
-| int | 10M | 1.0% | 3.88s ± 0.08s | 3.46s ± 0.07s | 3.77s ± 0.12s | 3.30s ± 0.04s | 1.28s ± 0.01s | 11.76s ± 0.12s | 911.2ms ± 12.5ms | 425.2ms ± 0.3ms | 347.5ms ± 3.6ms | 363.0ms ± 0.7ms | 405.7ms ± 2.1ms | 383.6ms ± 0.8ms | **1.11x** |
-| uuid | 1M | 0.10% | - | - | - | - | 160.9ms ± 0.4ms | 1.49s ± 0.00s | 157.8ms ± 0.6ms | 43.4ms ± 0.1ms | 30.2ms ± 0.2ms | 42.2ms ± 0.2ms | 42.9ms ± 0.1ms | 31.4ms ± 0.2ms | **1.38x** |
-| uuid | 1M | 1.0% | 311.2ms ± 2.2ms | 309.2ms ± 0.9ms | 306.3ms ± 0.3ms | 305.8ms ± 1.2ms | 158.2ms ± 0.8ms | 1.15s ± 0.00s | 125.4ms ± 0.2ms | 37.6ms ± 0.1ms | 30.3ms ± 0.2ms | 41.6ms ± 0.1ms | 42.7ms ± 0.1ms | 31.1ms ± 0.2ms | **1.21x** |
+| int | 1M | 0.10% | - | - | - | - | 124.9ms ± 0.5ms | 1.57s ± 0.00s | 102.5ms ± 0.1ms | 45.3ms ± 0.2ms | 32.1ms ± 0.1ms | 33.7ms ± 0.0ms | 33.6ms ± 0.1ms | 33.4ms ± 0.2ms | **1.36x** |
+| int | 1M | 1.0% | 330.1ms ± 2.5ms | 335.2ms ± 4.5ms | 318.4ms ± 2.2ms | 319.3ms ± 2.7ms | 122.7ms ± 1.2ms | 1.17s ± 0.00s | 82.4ms ± 0.2ms | 39.6ms ± 0.1ms | 33.5ms ± 0.1ms | 33.6ms ± 0.0ms | 33.5ms ± 0.1ms | 31.8ms ± 0.0ms | **1.24x** |
+| int | 10M | 0.10% | - | - | - | - | 1.51s ± 0.02s | 15.76s ± 0.05s | 1.29s ± 0.01s | 655.8ms ± 1.3ms | 453.8ms ± 22.2ms | 455.0ms ± 1.5ms | 477.7ms ± 3.9ms | 442.0ms ± 3.9ms | **1.48x** |
+| int | 10M | 1.0% | 3.53s ± 0.02s | 3.26s ± 0.04s | 3.49s ± 0.02s | 3.17s ± 0.04s | 1.28s ± 0.02s | 11.90s ± 0.13s | 884.3ms ± 3.9ms | 443.6ms ± 1.2ms | 362.0ms ± 0.8ms | 369.9ms ± 1.9ms | 368.7ms ± 0.6ms | 351.4ms ± 1.3ms | **1.26x** |
+| uuid | 1M | 0.10% | - | - | - | - | 160.1ms ± 0.1ms | 1.47s ± 0.00s | 158.0ms ± 0.1ms | 43.4ms ± 0.1ms | 31.8ms ± 0.1ms | 42.4ms ± 0.1ms | 42.4ms ± 0.1ms | 30.6ms ± 0.0ms | **1.42x** |
+| uuid | 1M | 1.0% | 309.2ms ± 2.6ms | 305.0ms ± 0.1ms | 303.8ms ± 0.2ms | 304.0ms ± 0.1ms | 157.2ms ± 0.0ms | 1.14s ± 0.00s | 125.7ms ± 0.1ms | 37.8ms ± 0.0ms | 30.4ms ± 0.1ms | 44.8ms ± 0.1ms | 42.5ms ± 0.1ms | 31.5ms ± 0.1ms | **1.20x** |
 
 ### Update Operations
 
 | Data Type | Size | FP Rate | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | abloom[free_threading] | abloom[serializable+free_threading] | abloom[serializable] | abloom[default] | Speedup (vs rbloom) |
 |-----------|------|---------|--------|--------|--------|--------|--------|--------|--------|--------|---------|
-| int | 1M | 0.10% | - | - | 131.9ms ± 0.1ms | 22.6ms ± 0.1ms | 8.9ms ± 0.0ms | 10.1ms ± 0.0ms | 6.8ms ± 0.1ms | 5.8ms ± 0.1ms | **3.91x** |
-| int | 1M | 1.0% | - | - | 110.7ms ± 0.1ms | 15.3ms ± 0.0ms | 8.8ms ± 0.0ms | 10.1ms ± 0.0ms | 6.7ms ± 0.1ms | 5.7ms ± 0.1ms | **2.70x** |
-| int | 10M | 0.10% | - | - | 1.62s ± 0.09s | 311.0ms ± 1.9ms | 152.8ms ± 2.9ms | 168.8ms ± 1.7ms | 123.2ms ± 6.9ms | 130.7ms ± 7.3ms | **2.38x** |
-| int | 10M | 1.0% | - | - | 1.17s ± 0.00s | 171.6ms ± 5.4ms | 103.1ms ± 3.0ms | 117.8ms ± 3.1ms | 84.1ms ± 3.2ms | 71.9ms ± 4.0ms | **2.39x** |
-| uuid | 1M | 0.10% | - | - | 187.8ms ± 1.0ms | 20.2ms ± 0.0ms | 9.2ms ± 0.1ms | 17.4ms ± 0.1ms | 13.6ms ± 0.1ms | 6.1ms ± 0.1ms | **3.31x** |
-| uuid | 1M | 1.0% | - | - | 154.0ms ± 0.4ms | 14.7ms ± 0.1ms | 9.2ms ± 0.1ms | 17.4ms ± 0.0ms | 13.5ms ± 0.0ms | 6.1ms ± 0.1ms | **2.42x** |
+| int | 1M | 0.10% | - | - | 134.0ms ± 0.1ms | 22.7ms ± 0.1ms | 8.9ms ± 0.0ms | 10.1ms ± 0.1ms | 6.6ms ± 0.0ms | 5.7ms ± 0.0ms | **4.00x** |
+| int | 1M | 1.0% | - | - | 113.0ms ± 2.3ms | 15.2ms ± 0.1ms | 8.8ms ± 0.0ms | 10.0ms ± 0.0ms | 6.6ms ± 0.0ms | 5.6ms ± 0.0ms | **2.72x** |
+| int | 10M | 0.10% | - | - | 1.63s ± 0.03s | 313.0ms ± 5.5ms | 152.4ms ± 2.5ms | 174.2ms ± 8.6ms | 122.8ms ± 2.8ms | 108.7ms ± 3.2ms | **2.88x** |
+| int | 10M | 1.0% | - | - | 1.17s ± 0.01s | 179.4ms ± 2.6ms | 104.6ms ± 2.8ms | 117.9ms ± 2.9ms | 79.9ms ± 1.5ms | 69.1ms ± 2.1ms | **2.60x** |
+| uuid | 1M | 0.10% | - | - | 190.6ms ± 4.3ms | 20.3ms ± 0.0ms | 9.3ms ± 0.1ms | 17.4ms ± 0.1ms | 13.6ms ± 0.0ms | 6.0ms ± 0.1ms | **3.35x** |
+| uuid | 1M | 1.0% | - | - | 154.2ms ± 0.1ms | 14.7ms ± 0.1ms | 9.2ms ± 0.0ms | 17.4ms ± 0.1ms | 13.5ms ± 0.0ms | 6.0ms ± 0.0ms | **2.46x** |
 
 ## Reproducing These Results
 

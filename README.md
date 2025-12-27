@@ -31,10 +31,10 @@ bf.clear()              # reset to empty
 
 ## Benchmarks
 | Operation | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | **abloom** | Speedup |
-|-----------|--------------|--------------|-------------------|--------|--------|---------|
-| Add | 85.2ms | 1.34s | 111.3ms | 49.5ms | **15.5ms** | 3.19x |
-| Lookup | 122.1ms | 1.18s | 82.7ms | 39.4ms | **32.9ms** | 1.20x |
-| Update | - | - | 110.7ms | 15.3ms | **5.7ms** | 2.70x |
+|-----------|--------------|--------------|-------------------|--------|--------|------------|
+| Add | 84.9ms | 1.34s | 111.5ms | 49.0ms | **15.3ms** | 3.19x |
+| Lookup | 122.7ms | 1.17s | 82.4ms | 39.6ms | **31.8ms** | 1.24x |
+| Update | - | - | 113.0ms | 15.2ms | **5.6ms** | 2.72x |
 
 *1M integers, 1% FPR, Apple M2. Full results [here](https://github.com/ampribe/abloom/blob/main/BENCHMARKS.md).*
 
@@ -104,9 +104,7 @@ with open("filter.bloom", "rb") as f:
 
 **Properties:** `capacity`, `fp_rate`, `k`, `byte_count`, `bit_count`, `serializable`, `free_threading`
 
-Full API documentation with examples: [`abloom/_abloom.pyi`](https://github.com/ampribe/abloom/blob/main/abloom/_abloom.pyi)
-
-Implementation Details and Rationale: [Implementation](https://github.com/ampribe/abloom/blob/main/docs/IMPLEMENTATION.md)
+**See also:** [API Reference](https://github.com/ampribe/abloom/blob/main/abloom/_abloom.pyi), [Implementation Details](https://github.com/ampribe/abloom/blob/main/docs/IMPLEMENTATION.md)
 
 ## Thread Safety
 By default, `abloom` is thread-safe on standard Python with the global interpreter lock (GIL). For [free-threaded Python](https://docs.python.org/3.13/howto/free-threading-python.html), set `free_threading=True` for thread safety. More details [here](https://github.com/ampribe/abloom/blob/main/docs/IMPLEMENTATION.md#24-thread-safety).
