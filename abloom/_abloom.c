@@ -3,10 +3,23 @@
 #include <math.h>
 #include <string.h>
 
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L &&                \
+// Atomics support detection and portable macros
+#if defined(_MSC_VER)
+#include <intrin.h>
+#define ABLOOM_HAS_ATOMICS 1
+#define ATOMIC_OR64(ptr, val)                                                  \
+  _InterlockedOr64((volatile long long *)(ptr), (val))
+#define ATOMIC_LOAD64(ptr)                                                     \
+  ((uint64_t)_InterlockedOr64((volatile long long *)(ptr), 0))
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L &&              \
     !defined(__STDC_NO_ATOMICS__)
 #include <stdatomic.h>
 #define ABLOOM_HAS_ATOMICS 1
+#define ATOMIC_OR64(ptr, val)                                                  \
+  atomic_fetch_or_explicit((_Atomic uint64_t *)(ptr), (val),                   \
+                           memory_order_relaxed)
+#define ATOMIC_LOAD64(ptr)                                                     \
+  atomic_load_explicit((_Atomic uint64_t *)(ptr), memory_order_relaxed)
 #else
 #define ABLOOM_HAS_ATOMICS 0
 #endif
@@ -117,44 +130,22 @@ static int64_t calculate_block_count(uint64_t capacity, double fp_rate) {
 }
 
 static inline void bloom_insert(BloomFilter *bf, uint64_t hash) {
-  // Upper 32 bits select the block
   uint64_t block_idx = (hash >> 32) % bf->block_count;
   uint32_t h_low = (uint32_t)hash;
-
   uint64_t *block = &bf->blocks[block_idx * BLOCK_WORDS];
-
-  uint32_t p0 = (h_low * SALT[0]) >> 26;
-  uint32_t p1 = (h_low * SALT[1]) >> 26;
-  uint32_t p2 = (h_low * SALT[2]) >> 26;
-  uint32_t p3 = (h_low * SALT[3]) >> 26;
-  uint32_t p4 = (h_low * SALT[4]) >> 26;
-  uint32_t p5 = (h_low * SALT[5]) >> 26;
-  uint32_t p6 = (h_low * SALT[6]) >> 26;
-  uint32_t p7 = (h_low * SALT[7]) >> 26;
 
 #if ABLOOM_HAS_ATOMICS
   if (bf->free_threading) {
-    _Atomic uint64_t *ablock = (_Atomic uint64_t *)block;
-    atomic_fetch_or_explicit(&ablock[0], 1ULL << p0, memory_order_relaxed);
-    atomic_fetch_or_explicit(&ablock[1], 1ULL << p1, memory_order_relaxed);
-    atomic_fetch_or_explicit(&ablock[2], 1ULL << p2, memory_order_relaxed);
-    atomic_fetch_or_explicit(&ablock[3], 1ULL << p3, memory_order_relaxed);
-    atomic_fetch_or_explicit(&ablock[4], 1ULL << p4, memory_order_relaxed);
-    atomic_fetch_or_explicit(&ablock[5], 1ULL << p5, memory_order_relaxed);
-    atomic_fetch_or_explicit(&ablock[6], 1ULL << p6, memory_order_relaxed);
-    atomic_fetch_or_explicit(&ablock[7], 1ULL << p7, memory_order_relaxed);
+    for (int i = 0; i < BLOCK_WORDS; i++) {
+      ATOMIC_OR64(&block[i], 1ULL << ((h_low * SALT[i]) >> 26));
+    }
     return;
   }
 #endif
 
-  block[0] |= (1ULL << p0);
-  block[1] |= (1ULL << p1);
-  block[2] |= (1ULL << p2);
-  block[3] |= (1ULL << p3);
-  block[4] |= (1ULL << p4);
-  block[5] |= (1ULL << p5);
-  block[6] |= (1ULL << p6);
-  block[7] |= (1ULL << p7);
+  for (int i = 0; i < BLOCK_WORDS; i++) {
+    block[i] |= 1ULL << ((h_low * SALT[i]) >> 26);
+  }
 }
 
 static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
@@ -164,44 +155,19 @@ static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
 
 #if ABLOOM_HAS_ATOMICS
   if (bf->free_threading) {
-    _Atomic uint64_t *ablock = (_Atomic uint64_t *)block;
-
-#define CHECK_WORD_ATOMIC(i)                                                   \
-  do {                                                                         \
-    uint64_t val = atomic_load_explicit(&ablock[i], memory_order_relaxed);     \
-    if (!(val & (1ULL << ((h_low * SALT[i]) >> 26))))                          \
-      return 0;                                                                \
-  } while (0)
-
-    CHECK_WORD_ATOMIC(0);
-    CHECK_WORD_ATOMIC(1);
-    CHECK_WORD_ATOMIC(2);
-    CHECK_WORD_ATOMIC(3);
-    CHECK_WORD_ATOMIC(4);
-    CHECK_WORD_ATOMIC(5);
-    CHECK_WORD_ATOMIC(6);
-    CHECK_WORD_ATOMIC(7);
+    for (int i = 0; i < BLOCK_WORDS; i++) {
+      if (!(ATOMIC_LOAD64(&block[i]) & (1ULL << ((h_low * SALT[i]) >> 26))))
+        return 0;
+    }
     return 1;
-
-#undef CHECK_WORD_ATOMIC
   }
 #endif
 
-#define CHECK_WORD(i)                                                          \
-  if (!(block[i] & (1ULL << ((h_low * SALT[i]) >> 26))))                       \
-  return 0
-
-  CHECK_WORD(0);
-  CHECK_WORD(1);
-  CHECK_WORD(2);
-  CHECK_WORD(3);
-  CHECK_WORD(4);
-  CHECK_WORD(5);
-  CHECK_WORD(6);
-  CHECK_WORD(7);
-
+  for (int i = 0; i < BLOCK_WORDS; i++) {
+    if (!(block[i] & (1ULL << ((h_low * SALT[i]) >> 26))))
+      return 0;
+  }
   return 1;
-#undef CHECK_WORD
 }
 
 // Fast path: uses Python's hash (not deterministic across processes)
@@ -505,10 +471,11 @@ static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
   }
 
   if (free_threading && !ABLOOM_HAS_ATOMICS) {
-    PyErr_SetString(PyExc_RuntimeError,
-                    "Serialized filter has free_threading=True, but C11 atomics "
-                    "are not available in this build. Use a pre-built wheel or "
-                    "rebuild with a modern compiler.");
+    PyErr_SetString(
+        PyExc_RuntimeError,
+        "Serialized filter has free_threading=True, but C11 atomics "
+        "are not available in this build. Use a pre-built wheel or "
+        "rebuild with a modern compiler.");
     return NULL;
   }
 
@@ -625,7 +592,8 @@ static PyObject *BloomFilter_get_serializable(BloomFilter *self,
   return PyBool_FromLong(self->serializable);
 }
 
-static PyObject *BloomFilter_get_free_threading(BloomFilter *self, void *closure) {
+static PyObject *BloomFilter_get_free_threading(BloomFilter *self,
+                                                void *closure) {
   return PyBool_FromLong(self->free_threading);
 }
 
@@ -637,8 +605,8 @@ static void BloomFilter_dealloc(BloomFilter *self) {
 }
 
 static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
-  static char *kwlist[] = {"capacity", "fp_rate", "serializable", "free_threading",
-                           NULL};
+  static char *kwlist[] = {"capacity", "fp_rate", "serializable",
+                           "free_threading", NULL};
   long long capacity_signed;
   double fp_rate = 0.01;
   int serializable = 0;
@@ -738,7 +706,8 @@ static PyGetSetDef BloomFilter_getsetters[] = {
     {"serializable", (getter)BloomFilter_get_serializable, NULL,
      "Whether the filter uses deterministic hashing for serialization", NULL},
     {"free_threading", (getter)BloomFilter_get_free_threading, NULL,
-     "Whether the filter uses atomic operations for free-threaded Python", NULL},
+     "Whether the filter uses atomic operations for free-threaded Python",
+     NULL},
     {NULL}};
 
 static PySequenceMethods BloomFilter_as_sequence = {
@@ -757,7 +726,8 @@ static PyObject *BloomFilter_repr(BloomFilter *self) {
     return NULL;
 
   PyObject *repr = PyUnicode_FromFormat(
-      "<BloomFilter capacity=%llu fp_rate=%R serializable=%s>", self->capacity, fp_obj, self->serializable ? "True" : "False");
+      "<BloomFilter capacity=%llu fp_rate=%R serializable=%s>", self->capacity,
+      fp_obj, self->serializable ? "True" : "False");
 
   Py_DECREF(fp_obj);
   return repr;
