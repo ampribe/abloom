@@ -7,9 +7,9 @@
 `abloom` is a high-performance Bloom filter implementation for Python, written in C.
 
 ## Why `abloom`?
-- **Fastest**: 2-3x faster than the fastest alternative `rbloom` on add/update, 1.2x faster on lookup
+- **Fastest**: 3x faster than the fastest alternative `rbloom` on add/update, 1.2x faster on lookup
 - **Fully-Featured**: Complete API with set operations and serialization
-- **Thoroughly Tested**: 270+ tests including property-based testing for Python 3.8+ on Linux, macOS, and Windows
+- **Thoroughly Tested**: 500+ tests including property-based testing for Python 3.8+ on Linux, macOS, and Windows
 - **Zero Dependencies**: Pure C extension without external dependencies
 
 ## Quick Start
@@ -32,9 +32,9 @@ bf.clear()              # reset to empty
 ## Benchmarks
 | Operation | fastbloom_rs | pybloom_live | pybloomfiltermmap | rbloom | **abloom** | Speedup |
 |-----------|--------------|--------------|-------------------|--------|--------|---------|
-| Add | 83.5ms | 1.33s | 111.2ms | 49.0ms | **17.2ms** | 2.85x |
-| Lookup | 123.4ms | 1.21s | 82.9ms | 39.7ms | **33.0ms** | 1.20x |
-| Update | - | - | 110.8ms | 15.3ms | **6.6ms** | 2.33x |
+| Add | 85.2ms | 1.34s | 111.3ms | 49.5ms | **15.5ms** | 3.19x |
+| Lookup | 122.1ms | 1.18s | 82.7ms | 39.4ms | **32.9ms** | 1.20x |
+| Update | - | - | 110.7ms | 15.3ms | **5.7ms** | 2.70x |
 
 *1M integers, 1% FPR, Apple M2. Full results [here](https://github.com/ampribe/abloom/blob/main/BENCHMARKS.md).*
 
@@ -102,9 +102,14 @@ with open("filter.bloom", "rb") as f:
 | `to_bytes()` | Serialize (requires `serializable=True`) |
 | `from_bytes(data)` | Deserialize (class method) |
 
-**Properties:** `capacity`, `fp_rate`, `k`, `byte_count`, `bit_count`, `serializable`
+**Properties:** `capacity`, `fp_rate`, `k`, `byte_count`, `bit_count`, `serializable`, `free_threading`
 
 Full API documentation with examples: [`abloom/_abloom.pyi`](https://github.com/ampribe/abloom/blob/main/abloom/_abloom.pyi)
+
+Implementation Details and Rationale: [Implementation](https://github.com/ampribe/abloom/blob/main/docs/IMPLEMENTATION.md)
+
+## Thread Safety
+By default, `abloom` is thread-safe on standard Python with the global interpreter lock (GIL). For [free-threaded Python](https://docs.python.org/3.13/howto/free-threading-python.html), set `free_threading=True` for thread safety. More details [here](https://github.com/ampribe/abloom/blob/main/docs/IMPLEMENTATION.md#24-thread-safety).
 
 ## Development
 ### Testing
