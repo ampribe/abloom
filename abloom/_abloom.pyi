@@ -16,9 +16,14 @@ class BloomFilter:
                 serialization across processes. Only bytes, str, int,
                 and float are supported in this mode. Default is False,
                 which uses Python's hash function for better performance.
+        free_threading: If True, uses atomic operations for compatibility with
+                free-threaded Python (PEP 703). Adds ~5-10% overhead but
+                guarantees no lost updates under concurrent writes. Default is
+                False, which relies on the GIL for synchronization.
 
     Raises:
         ValueError: If capacity is 0 or fp_rate is not in the valid range.
+        RuntimeError: If free_threading=True but atomics are unavailable (old compiler).
 
     Example:
         >>> bf = BloomFilter(capacity=10000, fp_rate=0.01)
@@ -47,7 +52,10 @@ class BloomFilter:
     serializable: bool
     """Whether the filter uses deterministic hashing for serialization."""
 
-    def __init__(self, capacity: int, fp_rate: float = 0.01, serializable: bool = False) -> None:
+    free_threading: bool
+    """Whether the filter uses atomic operations for free-threaded Python."""
+
+    def __init__(self, capacity: int, fp_rate: float = 0.01, serializable: bool = False, free_threading: bool = False) -> None:
         """Initialize a new Bloom filter.
 
         Args:
@@ -56,9 +64,12 @@ class BloomFilter:
                     Default is 0.01 (1%).
             serializable: If True, uses deterministic hashing for serialization support.
                     Default is False.
+            free_threading: If True, uses atomic operations for compatibility with
+                    free-threaded Python. Default is False.
 
         Raises:
             ValueError: If capacity is 0 or fp_rate is not in the valid range.
+            RuntimeError: If free_threading=True but atomics are unavailable.
         """
         ...
 
@@ -105,7 +116,6 @@ class BloomFilter:
         Raises:
             TypeError: If the item is not hashable, or in serializable mode,
                 if the item is not bytes, str, int, or float.
-            ValueError: In serializable mode, if an int is outside int64 range.
         """
         ...
 

@@ -3,6 +3,14 @@
 #include <math.h>
 #include <string.h>
 
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L &&                \
+    !defined(__STDC_NO_ATOMICS__)
+#include <stdatomic.h>
+#define ABLOOM_HAS_ATOMICS 1
+#else
+#define ABLOOM_HAS_ATOMICS 0
+#endif
+
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
@@ -14,9 +22,10 @@
 
 #define ABLOOM_MAGIC "ABLM"
 #define ABLOOM_MAGIC_SIZE 4
-#define ABLOOM_VERSION 1
+#define ABLOOM_VERSION 2
 #define ABLOOM_HEADER_SIZE                                                     \
-  29 // 4 magic + 1 version + 8 capacity + 8 fp_rate + 8 block_count
+  30 // 4 magic + 1 version + 8 capacity + 8 fp_rate + 8 block_count + 1
+     // free_threading
 
 static inline void write_be64(unsigned char *buf, uint64_t val) {
   buf[0] = (val >> 56) & 0xFF;
@@ -47,6 +56,7 @@ typedef struct {
   uint64_t capacity;
   double fp_rate;
   int serializable;
+  int free_threading;
 } BloomFilter;
 
 static double sbbf_fpr(double bits_per_element) {
@@ -122,6 +132,21 @@ static inline void bloom_insert(BloomFilter *bf, uint64_t hash) {
   uint32_t p6 = (h_low * SALT[6]) >> 26;
   uint32_t p7 = (h_low * SALT[7]) >> 26;
 
+#if ABLOOM_HAS_ATOMICS
+  if (bf->free_threading) {
+    _Atomic uint64_t *ablock = (_Atomic uint64_t *)block;
+    atomic_fetch_or_explicit(&ablock[0], 1ULL << p0, memory_order_relaxed);
+    atomic_fetch_or_explicit(&ablock[1], 1ULL << p1, memory_order_relaxed);
+    atomic_fetch_or_explicit(&ablock[2], 1ULL << p2, memory_order_relaxed);
+    atomic_fetch_or_explicit(&ablock[3], 1ULL << p3, memory_order_relaxed);
+    atomic_fetch_or_explicit(&ablock[4], 1ULL << p4, memory_order_relaxed);
+    atomic_fetch_or_explicit(&ablock[5], 1ULL << p5, memory_order_relaxed);
+    atomic_fetch_or_explicit(&ablock[6], 1ULL << p6, memory_order_relaxed);
+    atomic_fetch_or_explicit(&ablock[7], 1ULL << p7, memory_order_relaxed);
+    return;
+  }
+#endif
+
   block[0] |= (1ULL << p0);
   block[1] |= (1ULL << p1);
   block[2] |= (1ULL << p2);
@@ -136,6 +161,31 @@ static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
   uint64_t block_idx = (hash >> 32) % bf->block_count;
   uint32_t h_low = (uint32_t)hash;
   uint64_t *block = &bf->blocks[block_idx * BLOCK_WORDS];
+
+#if ABLOOM_HAS_ATOMICS
+  if (bf->free_threading) {
+    _Atomic uint64_t *ablock = (_Atomic uint64_t *)block;
+
+#define CHECK_WORD_ATOMIC(i)                                                   \
+  do {                                                                         \
+    uint64_t val = atomic_load_explicit(&ablock[i], memory_order_relaxed);     \
+    if (!(val & (1ULL << ((h_low * SALT[i]) >> 26))))                          \
+      return 0;                                                                \
+  } while (0)
+
+    CHECK_WORD_ATOMIC(0);
+    CHECK_WORD_ATOMIC(1);
+    CHECK_WORD_ATOMIC(2);
+    CHECK_WORD_ATOMIC(3);
+    CHECK_WORD_ATOMIC(4);
+    CHECK_WORD_ATOMIC(5);
+    CHECK_WORD_ATOMIC(6);
+    CHECK_WORD_ATOMIC(7);
+    return 1;
+
+#undef CHECK_WORD_ATOMIC
+  }
+#endif
 
 #define CHECK_WORD(i)                                                          \
   if (!(block[i] & (1ULL << ((h_low * SALT[i]) >> 26))))                       \
@@ -189,7 +239,8 @@ static inline int get_hash_serializable(PyObject *item, uint64_t *out_hash) {
 
 static int BloomFilter_compatible(BloomFilter *self, BloomFilter *other) {
   return self->capacity == other->capacity && self->fp_rate == other->fp_rate &&
-         self->serializable == other->serializable;
+         self->serializable == other->serializable &&
+         self->free_threading == other->free_threading;
 }
 
 static PyObject *BloomFilter_richcompare(BloomFilter *self, PyObject *other,
@@ -226,9 +277,9 @@ static PyObject *BloomFilter_or(BloomFilter *self, PyObject *other) {
   BloomFilter *other_bf = (BloomFilter *)other;
 
   if (!BloomFilter_compatible(self, other_bf)) {
-    PyErr_SetString(
-        PyExc_ValueError,
-        "BloomFilters must have the same capacity, fp_rate, and serializable");
+    PyErr_SetString(PyExc_ValueError,
+                    "BloomFilters must have the same capacity, fp_rate, "
+                    "serializable, and free_threading");
     return NULL;
   }
 
@@ -242,6 +293,7 @@ static PyObject *BloomFilter_or(BloomFilter *self, PyObject *other) {
   result->capacity = self->capacity;
   result->fp_rate = self->fp_rate;
   result->serializable = self->serializable;
+  result->free_threading = self->free_threading;
 
   size_t num_bytes = self->block_count * BLOCK_BYTES;
   result->blocks = PyMem_Malloc(num_bytes);
@@ -270,9 +322,9 @@ static PyObject *BloomFilter_ior(BloomFilter *self, PyObject *other) {
   BloomFilter *other_bf = (BloomFilter *)other;
 
   if (!BloomFilter_compatible(self, other_bf)) {
-    PyErr_SetString(
-        PyExc_ValueError,
-        "BloomFilters must have the same capacity, fp_rate, and serializable");
+    PyErr_SetString(PyExc_ValueError,
+                    "BloomFilters must have the same capacity, fp_rate, "
+                    "serializable, and free_threading");
     return NULL;
   }
 
@@ -316,6 +368,7 @@ static PyObject *BloomFilter_copy(BloomFilter *self,
   copy->capacity = self->capacity;
   copy->fp_rate = self->fp_rate;
   copy->serializable = self->serializable;
+  copy->free_threading = self->free_threading;
 
   size_t num_bytes = self->block_count * BLOCK_BYTES;
   copy->blocks = PyMem_Malloc(num_bytes);
@@ -364,6 +417,8 @@ static PyObject *BloomFilter_to_bytes(BloomFilter *self,
 
   write_be64(buf + offset, self->block_count);
   offset += 8;
+
+  buf[offset++] = self->free_threading ? 1 : 0;
 
   size_t num_words = self->block_count * BLOCK_WORDS;
   for (size_t i = 0; i < num_words; i++) {
@@ -424,6 +479,8 @@ static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
   uint64_t block_count = read_be64(data + offset);
   offset += 8;
 
+  int free_threading = data[offset++] != 0;
+
   size_t expected_block_data = block_count * BLOCK_BYTES;
   size_t expected_total = ABLOOM_HEADER_SIZE + expected_block_data;
   if ((size_t)data_len != expected_total) {
@@ -447,6 +504,14 @@ static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
     return NULL;
   }
 
+  if (free_threading && !ABLOOM_HAS_ATOMICS) {
+    PyErr_SetString(PyExc_RuntimeError,
+                    "Serialized filter has free_threading=True, but C11 atomics "
+                    "are not available in this build. Use a pre-built wheel or "
+                    "rebuild with a modern compiler.");
+    return NULL;
+  }
+
   BloomFilter *self = (BloomFilter *)type->tp_alloc(type, 0);
   if (self == NULL) {
     return NULL;
@@ -455,6 +520,7 @@ static PyObject *BloomFilter_from_bytes(PyTypeObject *type, PyObject *args) {
   self->capacity = capacity;
   self->fp_rate = fp_rate;
   self->serializable = 1;
+  self->free_threading = free_threading;
   self->block_count = block_count;
 
   size_t num_bytes = block_count * BLOCK_BYTES;
@@ -559,6 +625,10 @@ static PyObject *BloomFilter_get_serializable(BloomFilter *self,
   return PyBool_FromLong(self->serializable);
 }
 
+static PyObject *BloomFilter_get_free_threading(BloomFilter *self, void *closure) {
+  return PyBool_FromLong(self->free_threading);
+}
+
 static void BloomFilter_dealloc(BloomFilter *self) {
   if (self->blocks) {
     PyMem_Free(self->blocks);
@@ -567,13 +637,16 @@ static void BloomFilter_dealloc(BloomFilter *self) {
 }
 
 static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
-  static char *kwlist[] = {"capacity", "fp_rate", "serializable", NULL};
+  static char *kwlist[] = {"capacity", "fp_rate", "serializable", "free_threading",
+                           NULL};
   long long capacity_signed;
   double fp_rate = 0.01;
   int serializable = 0;
+  int free_threading = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "L|dp", kwlist, &capacity_signed,
-                                   &fp_rate, &serializable)) {
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "L|dpp", kwlist,
+                                   &capacity_signed, &fp_rate, &serializable,
+                                   &free_threading)) {
     return -1;
   }
 
@@ -590,6 +663,14 @@ static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
     return -1;
   }
 
+  if (free_threading && !ABLOOM_HAS_ATOMICS) {
+    PyErr_SetString(PyExc_RuntimeError,
+                    "free_threading=True requires C11 atomics, which are not "
+                    "available in this build. Use a pre-built wheel or rebuild "
+                    "with a modern compiler.");
+    return -1;
+  }
+
   int64_t block_count = calculate_block_count(capacity, fp_rate);
   if (block_count < 0) {
     PyErr_SetString(PyExc_ValueError,
@@ -600,6 +681,7 @@ static int BloomFilter_init(BloomFilter *self, PyObject *args, PyObject *kwds) {
   self->capacity = capacity;
   self->fp_rate = fp_rate;
   self->serializable = serializable;
+  self->free_threading = free_threading;
   self->block_count = (uint64_t)block_count;
 
   size_t num_bytes = self->block_count * BLOCK_BYTES;
@@ -621,6 +703,7 @@ static PyObject *BloomFilter_new(PyTypeObject *type, PyObject *args,
     self->capacity = 0;
     self->fp_rate = 0.0;
     self->serializable = 0;
+    self->free_threading = 0;
   }
   return (PyObject *)self;
 }
@@ -654,6 +737,8 @@ static PyGetSetDef BloomFilter_getsetters[] = {
      "Total bits in filter", NULL},
     {"serializable", (getter)BloomFilter_get_serializable, NULL,
      "Whether the filter uses deterministic hashing for serialization", NULL},
+    {"free_threading", (getter)BloomFilter_get_free_threading, NULL,
+     "Whether the filter uses atomic operations for free-threaded Python", NULL},
     {NULL}};
 
 static PySequenceMethods BloomFilter_as_sequence = {
@@ -672,7 +757,7 @@ static PyObject *BloomFilter_repr(BloomFilter *self) {
     return NULL;
 
   PyObject *repr = PyUnicode_FromFormat(
-      "<BloomFilter capacity=%llu fp_rate=%R>", self->capacity, fp_obj);
+      "<BloomFilter capacity=%llu fp_rate=%R serializable=%s>", self->capacity, fp_obj, self->serializable ? "True" : "False");
 
   Py_DECREF(fp_obj);
   return repr;
@@ -718,6 +803,9 @@ PyMODINIT_FUNC PyInit__abloom(void) {
     Py_DECREF(m);
     return NULL;
   }
+#ifdef Py_GIL_DISABLED
+  PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
+#endif
 
   return m;
 }
