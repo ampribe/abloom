@@ -16,6 +16,8 @@ import pyfusefilter
 LIBRARIES = {
     "abloom[default]": ABloomFilter,
     "abloom[serializable]": partial(ABloomFilter, serializable=True),
+    "abloom[free_threading]": partial(ABloomFilter, free_threading=True),
+    "abloom[serializable+free_threading]": partial(ABloomFilter, serializable=True, free_threading=True),
     "rbloom": RBloomFilter,
     "pybloom_live": PyBloom,
     "fastbloom_rs": FastBloomFilter,
