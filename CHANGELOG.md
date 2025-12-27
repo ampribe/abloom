@@ -8,10 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Planned
 - Variants: Counting BF, Scalable BF
-- Allow floats in serializable Bloom filter
+- Memray profiling
 
+## [1.0.0] - 2025-12-26
 ### Added
-- `serializable` option for deterministic hashing of bytes, ints, and strings
+- `serializable` option for deterministic hashing of bytes, ints, floats, and strings
+- `free_threading` option for compatibility with free-threaded Python
 
 ### Removed
 - block count rounding to pow2
