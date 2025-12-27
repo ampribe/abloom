@@ -252,6 +252,84 @@ class TestDataIntegrity:
         with pytest.raises(ValueError):
             BloomFilter.from_bytes(data_with_extra)
 
+    def test_from_bytes_capacity_zero_raises(self, bf_serializable):
+        """from_bytes() rejects data with capacity of 0.
+
+        Header layout: 4 magic + 1 version + 8 capacity (bytes 5-12)
+        """
+        bf = bf_serializable(CAPACITY_MEDIUM)
+        data = bytearray(bf.to_bytes())
+
+        # Set capacity to 0 (bytes 5-12, big-endian)
+        data[5:13] = (0).to_bytes(8, 'big')
+
+        with pytest.raises(ValueError, match=r"capacity|Invalid data"):
+            BloomFilter.from_bytes(bytes(data))
+
+    def test_from_bytes_fp_rate_zero_raises(self, bf_serializable):
+        """from_bytes() rejects data with fp_rate of 0.0.
+
+        Header layout: 4 magic + 1 version + 8 capacity + 8 fp_rate (bytes 13-20)
+        """
+        import struct
+
+        bf = bf_serializable(CAPACITY_MEDIUM)
+        data = bytearray(bf.to_bytes())
+
+        # Set fp_rate to 0.0 (bytes 13-20, big-endian double)
+        data[13:21] = struct.pack('>d', 0.0)
+
+        with pytest.raises(ValueError, match=r"fp_rate|Invalid data"):
+            BloomFilter.from_bytes(bytes(data))
+
+    def test_from_bytes_fp_rate_one_raises(self, bf_serializable):
+        """from_bytes() rejects data with fp_rate of 1.0.
+
+        fp_rate must be in range (0.0, 1.0) exclusive.
+        """
+        import struct
+
+        bf = bf_serializable(CAPACITY_MEDIUM)
+        data = bytearray(bf.to_bytes())
+
+        # Set fp_rate to 1.0 (bytes 13-20, big-endian double)
+        data[13:21] = struct.pack('>d', 1.0)
+
+        with pytest.raises(ValueError, match=r"fp_rate|Invalid data"):
+            BloomFilter.from_bytes(bytes(data))
+
+    def test_from_bytes_fp_rate_negative_raises(self, bf_serializable):
+        """from_bytes() rejects data with negative fp_rate.
+
+        fp_rate must be in range (0.0, 1.0) exclusive.
+        """
+        import struct
+
+        bf = bf_serializable(CAPACITY_MEDIUM)
+        data = bytearray(bf.to_bytes())
+
+        # Set fp_rate to -0.01 (bytes 13-20, big-endian double)
+        data[13:21] = struct.pack('>d', -0.01)
+
+        with pytest.raises(ValueError, match=r"fp_rate|Invalid data"):
+            BloomFilter.from_bytes(bytes(data))
+
+    def test_from_bytes_fp_rate_greater_than_one_raises(self, bf_serializable):
+        """from_bytes() rejects data with fp_rate > 1.0.
+
+        fp_rate must be in range (0.0, 1.0) exclusive.
+        """
+        import struct
+
+        bf = bf_serializable(CAPACITY_MEDIUM)
+        data = bytearray(bf.to_bytes())
+
+        # Set fp_rate to 1.5 (bytes 13-20, big-endian double)
+        data[13:21] = struct.pack('>d', 1.5)
+
+        with pytest.raises(ValueError, match=r"fp_rate|Invalid data"):
+            BloomFilter.from_bytes(bytes(data))
+
 
 class TestRoundTrip:
     """Tests for serialization round-trips."""

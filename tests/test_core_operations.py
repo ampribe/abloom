@@ -121,6 +121,18 @@ class TestDataTypes:
         with pytest.raises(TypeError):
             bf.add(value)
 
+    @pytest.mark.parametrize("value,description", [
+        ([1, 2, 3], "list"),
+        ({"key": "value"}, "dict"),
+        ({1, 2, 3}, "set"),
+    ], ids=lambda x: x if isinstance(x, str) else None)
+    def test_unhashable_types_rejected_in_contains(self, bf_standard, value, description):
+        """Unhashable types raise TypeError in __contains__ (membership testing)."""
+        bf = bf_standard(CAPACITY_MEDIUM)
+        bf.add("some_item")  # Add something so filter is non-empty
+        with pytest.raises(TypeError):
+            _ = value in bf
+
 
 class TestNoFalseNegatives:
     """Tests verifying the no false negatives guarantee."""
