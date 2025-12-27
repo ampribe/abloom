@@ -65,7 +65,8 @@ class BenchmarkResult:
 def parse_benchmark_name(name: str) -> dict | None:
     """Parse a benchmark test name into components."""
     # Pattern: test_benchmark[lib-workload-datatype_size_fprate]
-    main_pattern = r"test_benchmark\[(\w+)-(\w+)-(\w+)_(\d+)_([\d.]+)\]"
+    # Library names can include brackets and plus signs: abloom[serializable+free_threading]
+    main_pattern = r"test_benchmark\[([\w\[\]+]+)-(\w+)-(\w+)_(\d+)_([\d.]+)\]"
     match = re.match(main_pattern, name)
     if match:
         return {
@@ -116,22 +117,11 @@ def load_results(filepath: Path) -> tuple[list[BenchmarkResult], dict, list[str]
         "branch": commit_info.get("branch", "unknown"),
     }
     
-    # Sort libraries with "abloom" LAST (so it appears rightmost in tables)
-    sorted_libs = sorted(libraries, key=lambda x: (1 if x == "abloom" else 0, x))
+    # Sort libraries with abloom variants LAST (so they appear rightmost in tables)
+    # Within abloom variants, sort alphabetically
+    sorted_libs = sorted(libraries, key=lambda x: (1 if x.startswith("abloom") else 0, x))
     
     return results, metadata, sorted_libs
-
-
-def format_time(ms: float) -> str:
-    """Format time in appropriate units."""
-    if ms >= 1000:
-        return f"{ms/1000:.2f}s"
-    elif ms >= 1:
-        return f"{ms:.1f}ms"
-    elif ms >= 0.001:
-        return f"{ms*1000:.1f}µs"
-    else:
-        return f"{ms*1000000:.1f}ns"
 
 
 def format_time_with_stddev(mean_ms: float, stddev_ms: float) -> str:
@@ -155,24 +145,6 @@ def format_size(n: int) -> str:
         return f"{n // 1_000}K"
     return str(n)
 
-
-def format_ops_per_sec(ops: float) -> str:
-    """Format operations per second."""
-    if ops >= 1_000_000_000:
-        return f"{ops/1e9:.2f}B/s"
-    elif ops >= 1_000_000:
-        return f"{ops/1e6:.1f}M/s"
-    elif ops >= 1_000:
-        return f"{ops/1e3:.1f}K/s"
-    return f"{ops:.0f}/s"
-
-
-def format_result_detailed(r: BenchmarkResult) -> str:
-    """Format a result with mean ± stddev, median, and ops/sec."""
-    mean_str = format_time_with_stddev(r.mean_ms, r.stddev_ms)
-    median_str = format_time(r.median_ms)
-    ops_str = format_ops_per_sec(r.ops_per_sec)
-    return f"{mean_str} (median: {median_str}, {ops_str})"
 
 
 def calculate_speedup(target_ms: float, baseline_ms: float) -> tuple[float, str]:
@@ -200,8 +172,11 @@ def generate_summary_section(
     lines.append("**Canonical benchmark: 1 million integers, 1% false positive rate**")
     lines.append("")
 
-    # Exclude static filters from summary (they only support lookup)
-    summary_libs = [lib for lib in libraries if lib not in STATIC_FILTERS]
+    # Summary only shows non-static, non-abloom-variant libraries + abloom[default]
+    summary_libs = [
+        lib for lib in libraries
+        if lib not in STATIC_FILTERS and (not lib.startswith("abloom") or lib == "abloom[default]")
+    ]
 
     # Find canonical results
     canonical = {}
@@ -210,19 +185,12 @@ def generate_summary_section(
             key = (r.lib, r.workload)
             canonical[key] = r
 
-    # Determine which libraries get detailed output (baseline and abloom)
-    detailed_libs = {baseline, "abloom"}
-
     # Build header: Operation | lib1 | lib2 | ... | Speedup (vs baseline)
     header = "| Operation |"
     separator = "|-----------|"
     for lib in summary_libs:
         header += f" {lib} |"
-        # Use wider separator for detailed columns
-        if lib in detailed_libs:
-            separator += "--------------------------------|"
-        else:
-            separator += "--------|"
+        separator += "--------|"
     header += f" Speedup (vs {baseline}) |"
     separator += "---------|"
 
@@ -239,23 +207,19 @@ def generate_summary_section(
             if key in canonical:
                 r = canonical[key]
                 lib_times[lib] = r.mean_ms
-                # Use detailed format for abloom and baseline
-                if lib in detailed_libs:
-                    row += f" {format_result_detailed(r)} |"
-                else:
-                    row += f" {format_time_with_stddev(r.mean_ms, r.stddev_ms)} |"
+                row += f" {format_time_with_stddev(r.mean_ms, r.stddev_ms)} |"
             else:
                 row += " - |"
-        
-        # Calculate speedup: abloom vs baseline
-        if "abloom" in lib_times and baseline in lib_times:
-            _, speedup_str = calculate_speedup(lib_times["abloom"], lib_times[baseline])
+
+        # Calculate speedup: abloom[default] vs baseline
+        if "abloom[default]" in lib_times and baseline in lib_times:
+            _, speedup_str = calculate_speedup(lib_times["abloom[default]"], lib_times[baseline])
             row += f" {speedup_str} |"
         else:
             row += " - |"
-        
+
         lines.append(row)
-    
+
     lines.append("")
     return "\n".join(lines)
 
@@ -275,6 +239,10 @@ def generate_detailed_table(
     else:
         table_libs = libraries
 
+    # Reorder so abloom[default] is last (used for speedup calculation)
+    if "abloom[default]" in table_libs:
+        table_libs = [lib for lib in table_libs if lib != "abloom[default]"] + ["abloom[default]"]
+
     # Filter results for this workload
     workload_results = [r for r in results if r.workload == workload]
 
@@ -291,19 +259,12 @@ def generate_detailed_table(
             configs[key] = {}
         configs[key][r.lib] = r
 
-    # Determine which libraries get detailed output (baseline and abloom)
-    detailed_libs = {baseline, "abloom"}
-
     # Build dynamic header
     header = "| Data Type | Size | FP Rate |"
     separator = "|-----------|------|---------|"
     for lib in table_libs:
         header += f" {lib} |"
-        # Use wider separator for detailed columns
-        if lib in detailed_libs:
-            separator += "--------------------------------|"
-        else:
-            separator += "--------|"
+        separator += "--------|"
     header += f" Speedup (vs {baseline}) |"
     separator += "---------|"
 
@@ -338,23 +299,19 @@ def generate_detailed_table(
             if lib in libs_data:
                 r = libs_data[lib]
                 lib_times[lib] = r.mean_ms
-                # Use detailed format for abloom and baseline
-                if lib in detailed_libs:
-                    row += f" {format_result_detailed(r)} |"
-                else:
-                    row += f" {format_time_with_stddev(r.mean_ms, r.stddev_ms)} |"
+                row += f" {format_time_with_stddev(r.mean_ms, r.stddev_ms)} |"
             else:
                 row += " - |"
-        
-        # Calculate speedup: abloom vs baseline
-        if "abloom" in lib_times and baseline in lib_times:
-            _, speedup_str = calculate_speedup(lib_times["abloom"], lib_times[baseline])
+
+        # Calculate speedup: abloom[default] vs baseline
+        if "abloom[default]" in lib_times and baseline in lib_times:
+            _, speedup_str = calculate_speedup(lib_times["abloom[default]"], lib_times[baseline])
             row += f" {speedup_str} |"
         else:
             row += " - |"
-        
+
         lines.append(row)
-    
+
     lines.append("")
     return "\n".join(lines)
 
@@ -486,8 +443,14 @@ def main():
             sys.exit(1)
         baseline = args.baseline
     else:
-        # Default: first non-abloom library, or abloom if it's the only one
-        baseline = next((lib for lib in libraries if lib != "abloom"), libraries[0])
+        # Default: prefer rbloom, then first non-abloom non-static library
+        def is_good_baseline(lib: str) -> bool:
+            return not lib.startswith("abloom") and lib not in STATIC_FILTERS
+
+        if "rbloom" in libraries:
+            baseline = "rbloom"
+        else:
+            baseline = next((lib for lib in libraries if is_good_baseline(lib)), "abloom[default]")
     
     print(f"Discovered libraries: {', '.join(libraries)}", file=sys.stderr)
     print(f"Using baseline: {baseline}", file=sys.stderr)
