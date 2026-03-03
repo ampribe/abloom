@@ -9,7 +9,7 @@
 ## Why `abloom`?
 - **Fastest**: 3x faster than the fastest alternative `rbloom` on add/update, 1.2x faster on lookup
 - **Fully-Featured**: Complete API with set operations and serialization
-- **Thoroughly Tested**: 500+ tests including property-based testing for Python 3.8+ on Linux, macOS, and Windows
+- **Thoroughly Tested**: 500+ tests for Python 3.8+ on Linux, macOS, and Windows
 - **Zero Dependencies**: Pure C extension without external dependencies
 
 ## Quick Start
@@ -50,8 +50,7 @@ return db.query(user_id)  # Probably in DB
 ### Web Crawling
 ```python
 seen = BloomFilter(10_000_000, 0.001)
-if url not in seen:
-    seen.add(url)
+if seen.add(url):  # True if definitely new
     crawl(url)
 ```
 
@@ -89,7 +88,7 @@ with open("filter.bloom", "rb") as f:
 
 | Method | Description |
 |--------|-------------|
-| `add(item)` | Add single item |
+| `add(item)` | Add single item, returns `True` if new |
 | `update(items)` | Add multiple items |
 | `item in bf` | Check membership |
 | `bf.copy()` | Duplicate filter |
