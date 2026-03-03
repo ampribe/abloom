@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "abloom"
-version = "1.0.0"
+version = "1.1.0"
 description = "High-performance Bloom filter for Python"
 requires-python = ">=3.8"
 readme = "README.md"

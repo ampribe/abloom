@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Variants: Counting BF, Scalable BF
 - Memray profiling
 
+## [1.1.0] - 2026-03-02
+### Changed
+- `add()` now returns `bool`: `True` if the item is definitely new, `False` if possibly already present (closes #1)
+
 ## [1.0.0] - 2025-12-26
 ### Added
 - `serializable` option for deterministic hashing of bytes, ints, floats, and strings
