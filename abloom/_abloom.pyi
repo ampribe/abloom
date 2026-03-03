@@ -73,13 +73,17 @@ class BloomFilter:
         """
         ...
 
-    def add(self, item: object) -> None:
+    def add(self, item: object) -> bool:
         """Add an item to the bloom filter.
 
         Args:
             item: Any hashable Python object to add to the filter.
                 In serializable mode, only bytes, str, int,
                 and float are supported.
+
+        Returns:
+            True if the item is definitely new (was not previously present).
+            False if the item was possibly already present (may be a false positive).
 
         Raises:
             TypeError: If the item is not hashable, or in serializable mode,

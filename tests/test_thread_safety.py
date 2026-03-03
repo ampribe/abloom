@@ -259,8 +259,8 @@ class TestConcurrentAdd:
 
         assert_no_false_negatives(bf, all_items)
 
-    def test_concurrent_add_returns_none(self, bf_free_threading):
-        """add() returns None even under concurrent access."""
+    def test_concurrent_add_returns_bool(self, bf_free_threading):
+        """add() returns a bool even under concurrent access."""
         bf = bf_free_threading(CAPACITY_LARGE)
         results = []
         lock = threading.Lock()
@@ -276,7 +276,7 @@ class TestConcurrentAdd:
             for f in as_completed(futures):
                 f.result()
 
-        assert all(r is None for r in results)
+        assert all(isinstance(r, bool) for r in results)
 
     def test_concurrent_update_batches(self, bf_free_threading):
         """Multiple update() calls with large batches."""

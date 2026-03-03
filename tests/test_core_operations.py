@@ -45,11 +45,45 @@ class TestAdd:
 
         assert_no_false_negatives(bf, items, "All added items should be found")
 
-    def test_add_returns_none(self, bf_factory):
-        """add() returns None."""
+    def test_add_returns_bool(self, bf_factory):
+        """add() returns a boolean."""
         bf = bf_factory(CAPACITY_MEDIUM)
         result = bf.add("item")
-        assert result is None
+        assert isinstance(result, bool)
+
+    def test_add_returns_true_for_new_item(self, bf_factory):
+        """add() returns True for a definitely new item."""
+        bf = bf_factory(CAPACITY_MEDIUM)
+        assert bf.add("item") is True
+
+    def test_add_returns_false_for_duplicate(self, bf_factory):
+        """add() returns False for an item that was already added."""
+        bf = bf_factory(CAPACITY_MEDIUM)
+        bf.add("item")
+        assert bf.add("item") is False
+
+    def test_add_return_value_multiple_new_items(self, bf_factory):
+        """add() returns True for each distinct new item."""
+        bf = bf_factory(CAPACITY_LARGE)
+        items = [f"unique_{i}" for i in range(ITEM_COUNT_MEDIUM)]
+        results = [bf.add(item) for item in items]
+        assert all(r is True for r in results)
+
+    def test_add_return_value_readd_rate(self, bf_factory):
+        """Re-adding items returns False at a rate consistent with FP guarantees."""
+        bf = bf_factory(CAPACITY_LARGE, FP_RATE_STANDARD)
+        items = [f"item_{i}" for i in range(ITEM_COUNT_LARGE)]
+        for item in items:
+            bf.add(item)
+
+        false_new_count = sum(1 for item in items if bf.add(item) is True)
+        # All re-adds should return False (possibly present), except for
+        # occasional false positives in the opposite direction — which can't
+        # happen: if bits were set, they stay set. So this should be exactly 0.
+        assert false_new_count == 0, (
+            f"Re-adding items should always return False, but {false_new_count} "
+            f"out of {len(items)} returned True"
+        )
 
     def test_add_duplicate_item(self, bf_factory):
         """Adding same item multiple times works correctly."""

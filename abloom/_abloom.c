@@ -129,23 +129,31 @@ static int64_t calculate_block_count(uint64_t capacity, double fp_rate) {
   return (int64_t)min_blocks;
 }
 
-static inline void bloom_insert(BloomFilter *bf, uint64_t hash) {
+static inline int bloom_insert(BloomFilter *bf, uint64_t hash) {
   uint64_t block_idx = (hash >> 32) % bf->block_count;
   uint32_t h_low = (uint32_t)hash;
   uint64_t *block = &bf->blocks[block_idx * BLOCK_WORDS];
+  int new_item = 0;
 
 #if ABLOOM_HAS_ATOMICS
   if (bf->free_threading) {
     for (int i = 0; i < BLOCK_WORDS; i++) {
-      ATOMIC_OR64(&block[i], 1ULL << ((h_low * SALT[i]) >> 26));
+      uint64_t mask = 1ULL << ((h_low * SALT[i]) >> 26);
+      uint64_t old = ATOMIC_OR64(&block[i], mask);
+      if (!(old & mask))
+        new_item = 1;
     }
-    return;
+    return new_item;
   }
 #endif
 
   for (int i = 0; i < BLOCK_WORDS; i++) {
-    block[i] |= 1ULL << ((h_low * SALT[i]) >> 26);
+    uint64_t mask = 1ULL << ((h_low * SALT[i]) >> 26);
+    if (!(block[i] & mask))
+      new_item = 1;
+    block[i] |= mask;
   }
+  return new_item;
 }
 
 static inline int bloom_check(BloomFilter *bf, uint64_t hash) {
@@ -551,8 +559,8 @@ static PyObject *BloomFilter_add(BloomFilter *self, PyObject *item) {
   if (err < 0)
     return NULL;
 
-  bloom_insert(self, hash);
-  Py_RETURN_NONE;
+  int is_new = bloom_insert(self, hash);
+  return PyBool_FromLong(is_new);
 }
 
 static int BloomFilter_contains(BloomFilter *self, PyObject *item) {
@@ -678,7 +686,8 @@ static PyObject *BloomFilter_new(PyTypeObject *type, PyObject *args,
 
 static PyMethodDef BloomFilter_methods[] = {
     {"add", (PyCFunction)BloomFilter_add, METH_O,
-     "Add an item to the bloom filter"},
+     "Add an item. Returns True if definitely new, False if possibly already "
+     "present."},
     {"update", (PyCFunction)BloomFilter_update, METH_O,
      "Add items from an iterable to the bloom filter"},
     {"copy", (PyCFunction)BloomFilter_copy, METH_NOARGS,
